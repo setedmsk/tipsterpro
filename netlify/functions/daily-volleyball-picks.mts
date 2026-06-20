@@ -11,6 +11,7 @@ const DEFAULT_STAKE = 5;
 const DEFAULT_MAX_SELECTIONS = 5;
 const SPORT_LIMIT = 3;
 const CANDIDATE_LIMIT = 12;
+const REPORT_CACHE_VERSION = "volley-points-v2";
 
 type SportKey = "volleyball";
 
@@ -82,6 +83,7 @@ type SportReport = {
     gamesAnalyzed: number;
     matched: number;
     picksFound: number;
+    cacheVersion?: string;
     cached?: boolean;
   };
   analysis: Record<string, unknown>;
@@ -151,6 +153,57 @@ function bookmakerPriority(name?: string) {
 
 function hasDifficultLine(value: string) {
   return /(^|[^\d])\d+[,.](25|75)([^\d]|$)/.test(String(value || ""));
+}
+
+function extractLine(value: string) {
+  const match = String(value || "").match(/(^|[^\d])(\d+(?:[,.]\d+)?)([^\d]|$)/);
+  if (!match) return null;
+  const line = Number(match[2].replace(",", "."));
+  return Number.isFinite(line) ? line : null;
+}
+
+function hasInvalidVolleyballPointsLine(market: string, selection: string) {
+  if (!isVolleyballTotalPointsMarket(market)) return false;
+  const line = extractLine(selection || market);
+  return line !== null && line < 15;
+}
+
+function isVolleyballTotalSetsMarket(market: string) {
+  const normalized = normalizeText(market);
+  return (
+    normalized.includes("total sets") ||
+    normalized.includes("sets total") ||
+    normalized.includes("number of sets") ||
+    normalized.includes("total de sets")
+  );
+}
+
+function volleyballSetLabel(market: string) {
+  const normalized = normalizeText(market);
+  const match = normalized.match(/\b(?:set|sets|seto)\s*([1-5])\b/) || normalized.match(/\b([1-5])(?:st|nd|rd|th)\s*set\b/);
+  if (!match) return "";
+  const labels: Record<string, string> = {
+    "1": "1o set",
+    "2": "2o set",
+    "3": "3o set",
+    "4": "4o set",
+    "5": "5o set",
+  };
+  return labels[match[1]] || "";
+}
+
+function isVolleyballTotalPointsMarket(market: string) {
+  const normalized = normalizeText(market);
+  if (isVolleyballTotalSetsMarket(market)) return false;
+  if (normalized.includes("team") || normalized.includes("player")) return false;
+  return (
+    normalized.includes("total points") ||
+    normalized.includes("points total") ||
+    normalized.includes("match points") ||
+    normalized.includes("set points") ||
+    normalized.includes("total de pontos") ||
+    (normalized.includes("over under") && normalized.includes("points"))
+  );
 }
 
 function todayInSaoPaulo() {
@@ -233,6 +286,9 @@ function leaguePriority(event: ApiEvent, sport: SportKey) {
 
 function isUnsupportedMarket(sport: SportKey, market: string) {
   const normalized = normalizeText(market);
+  if (sport === "volleyball" && isVolleyballTotalPointsMarket(market)) return false;
+  if (sport === "volleyball" && isVolleyballTotalSetsMarket(market)) return true;
+
   const commonBad = [
     "alternative",
     "alternate",
@@ -240,7 +296,6 @@ function isUnsupportedMarket(sport: SportKey, market: string) {
     "exact score",
     "odd even",
     "race to",
-    "first",
     "last",
     "player",
     "minute",
@@ -253,17 +308,10 @@ function isUnsupportedMarket(sport: SportKey, market: string) {
   if (commonBad.some((fragment) => normalized.includes(fragment))) return true;
 
   return [
-    "set 1",
-    "set 2",
-    "set 3",
-    "set 4",
-    "set 5",
-    "1st set",
-    "2nd set",
-    "3rd set",
-    "4th set",
-    "5th set",
-    "total points set",
+    "set winner",
+    "winner set",
+    "set handicap",
+    "correct set",
   ].some((fragment) => normalized.includes(fragment));
 }
 
@@ -279,11 +327,7 @@ function marketCategory(sport: SportKey, market: string, selection = ""): PickCa
     normalizedMarket.includes("game winner")
   ) return "vencedor";
 
-  if (
-    ["over under", "total points", "match total points", "total sets"].includes(normalizedMarket) ||
-    (normalizedMarket.includes("total") && !normalizedMarket.includes("team")) ||
-    normalizedMarket.includes("over under")
-  ) return "total";
+  if (isVolleyballTotalPointsMarket(market)) return "total";
 
   return "outros";
 }
@@ -292,8 +336,10 @@ function displayMarket(sport: SportKey, market: string) {
   const normalized = normalizeText(market);
   if (normalized.includes("winner") || normalized.includes("home away") || normalized.includes("moneyline")) return "Vencedor da partida";
   if (normalized.includes("handicap")) return "Handicap de sets/pontos";
-  if (normalized.includes("total sets")) return "Total de sets - Mais/Menos";
-  if (normalized.includes("over under") || normalized.includes("total points")) return "Total da partida - Mais/Menos";
+  if (isVolleyballTotalPointsMarket(market)) {
+    const setLabel = volleyballSetLabel(market);
+    return setLabel ? `Total de pontos ${setLabel} - Mais/Menos` : "Total de pontos - Mais/Menos";
+  }
   return String(market || "").replace(/_/g, " ");
 }
 
@@ -330,6 +376,7 @@ function collectOddsValues(sport: SportKey, bookmakers: any[]) {
       for (const value of bet.values || []) {
         const selection = String(value.value || "");
         if (hasDifficultLine(`${market} ${selection}`)) continue;
+        if (sport === "volleyball" && hasInvalidVolleyballPointsLine(market, selection)) continue;
 
         const odd = Number.parseFloat(String(value.odd || "0"));
         const category = marketCategory(sport, market, selection);
@@ -379,7 +426,9 @@ function pickScore(pick: Pick<SportPick, "odd" | "category" | "bookmaker">, even
 
 function reasonForPick(pick: SportPick) {
   if (pick.category === "vencedor") return "Mercado mais simples do volei: vencedor da partida.";
-  if (pick.category === "total") return "Total da partida, sem mercado por set especifico.";
+  if (pick.category === "total") return pick.market.includes("set")
+    ? "Total de pontos por set, mercado comum e facil de conferir na Bet."
+    : "Total de pontos da partida, linha comum para volei.";
   return "Mercado padrao filtrado por odd e clareza.";
 }
 
@@ -610,6 +659,7 @@ async function computeReport(date: string, stake: number, maxSelections: number)
       gamesAnalyzed: fixtures.length,
       matched: fixtures.length,
       picksFound: picks.length,
+      cacheVersion: REPORT_CACHE_VERSION,
     },
     analysis,
     raw: {
@@ -629,6 +679,7 @@ function isUsableReport(report: SportReport | null) {
     report?.source?.picksFound &&
     report.source.picksFound > 0 &&
     String(report.source.provider || "").includes("API-Volleyball") &&
+    report.source.cacheVersion === REPORT_CACHE_VERSION &&
     picks.length &&
     picks.every((pick) => pick.bookmaker && !isUnsupportedMarket(pick.sport, `${pick.market} ${pick.selection}`))
   );
@@ -636,7 +687,7 @@ function isUsableReport(report: SportReport | null) {
 
 async function readCachedReport(date: string) {
   try {
-    const report = await reportStore().get(`reports/${date}.json`, { type: "json" }) as SportReport | null;
+    const report = await reportStore().get(`reports/${REPORT_CACHE_VERSION}/${date}.json`, { type: "json" }) as SportReport | null;
     return isUsableReport(report) ? report : null;
   } catch {
     return null;
@@ -648,7 +699,7 @@ async function saveReport(report: SportReport) {
 
   try {
     const store = reportStore();
-    await store.setJSON(`reports/${report.source.date}.json`, report);
+    await store.setJSON(`reports/${REPORT_CACHE_VERSION}/${report.source.date}.json`, report);
     await store.setJSON("latest.json", report);
   } catch {
     // The response remains useful when blob storage is unavailable locally.

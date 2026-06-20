@@ -487,6 +487,29 @@
       gap: 8px;
     }
 
+    .settlement-actions {
+      margin-top: 8px;
+      padding: 10px;
+      border: 1px solid rgba(168, 85, 247, 0.2);
+      border-radius: var(--radius);
+      background:
+        linear-gradient(135deg, rgba(168, 85, 247, 0.1), rgba(37, 217, 255, 0.04)),
+        rgba(12, 11, 21, 0.74);
+    }
+
+    .settlement-heading {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      margin: 0 0 8px;
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 850;
+      letter-spacing: 0.02em;
+      text-transform: uppercase;
+    }
+
     .btn {
       display: inline-flex;
       min-height: 46px;
@@ -1106,6 +1129,17 @@
         grid-template-columns: repeat(4, minmax(0, 1fr));
       }
 
+      .settlement-actions {
+        display: grid;
+        grid-template-columns: 1fr 1.5fr;
+        align-items: center;
+        gap: 10px;
+      }
+
+      .settlement-heading {
+        margin: 0;
+      }
+
       .ticket-actions {
         grid-template-columns: 1fr 1fr;
       }
@@ -1308,14 +1342,15 @@
                   </svg>
                   ⚽ Hoje
                 </button>
-                <button class="btn btn-secondary" type="button" id="settledPicksBtn" title="Relat&oacute;rio dos palpites que bateram ou n&atilde;o bateram no dia">
+                <button class="btn btn-secondary" type="button" id="mixedPicksBtn" title="Misturar futebol, basquete, v&ocirc;lei e e-sports em um bilhete de odd mais alta">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
-                    <path d="M4 6h16"></path>
-                    <path d="M4 12h10"></path>
-                    <path d="M4 18h8"></path>
-                    <path d="M16 15l2 2 4-5"></path>
+                    <path d="M16 3h5v5"></path>
+                    <path d="M4 20l17-17"></path>
+                    <path d="M21 16v5h-5"></path>
+                    <path d="M15 15l6 6"></path>
+                    <path d="M4 4l5 5"></path>
                   </svg>
-                  <span class="btn-label">Acertos do dia</span>
+                  <span class="btn-label">Mix forte</span>
                 </button>
                 <button class="btn btn-secondary" type="button" id="brSerieABtn" title="Melhores palpites do Brasileir&atilde;o S&eacute;rie A">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
@@ -1365,6 +1400,18 @@
                     <path d="M7 8h10a5 5 0 0 1 5 5v1.5a3.5 3.5 0 0 1-6.2 2.2L14.5 15h-5l-1.3 1.7A3.5 3.5 0 0 1 2 14.5V13a5 5 0 0 1 5-5z"></path>
                   </svg>
                   🎮 Hoje
+                </button>
+              </div>
+              <div class="settlement-actions">
+                <p class="settlement-heading">Fechamento dos palpites</p>
+                <button class="btn btn-secondary" type="button" id="settledPicksBtn" title="Relat&oacute;rio dos palpites que bateram ou n&atilde;o bateram no dia">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
+                    <path d="M4 6h16"></path>
+                    <path d="M4 12h10"></path>
+                    <path d="M4 18h8"></path>
+                    <path d="M16 15l2 2 4-5"></path>
+                  </svg>
+                  <span class="btn-label">Acertos do dia</span>
                 </button>
               </div>
             </div>
@@ -1541,6 +1588,7 @@
     const bestBtn = document.getElementById("bestBtn");
     const liveAnalyzeBtn = document.getElementById("liveAnalyzeBtn");
     const dailyPicksBtn = document.getElementById("dailyPicksBtn");
+    const mixedPicksBtn = document.getElementById("mixedPicksBtn");
     const settledPicksBtn = document.getElementById("settledPicksBtn");
     const brSerieABtn = document.getElementById("brSerieABtn");
     const brMixBtn = document.getElementById("brMixBtn");
@@ -3137,6 +3185,42 @@
       }
     }
 
+    async function runMixedPicks(triggerButton = mixedPicksBtn) {
+      const originalHtml = triggerButton.innerHTML;
+      triggerButton.disabled = true;
+      triggerButton.textContent = "Montando mix...";
+      outputEl.innerHTML = "<div class=\"empty-state\"><div><strong>Montando mix forte</strong><span>Juntando futebol, basquete, v&ocirc;lei e e-sports com mercados simples e odds altas.</span></div></div>";
+
+      try {
+        const params = new URLSearchParams({
+          date: analysisDateInput.value || todayInSaoPaulo(),
+          stake: String(Number(stakeInput.value || 5)),
+          maxSelections: "7"
+        });
+        const response = await fetch("/api/daily-mixed-picks?" + params.toString());
+        const data = await response.json();
+
+        if (!response.ok) {
+          renderSetupError(data);
+          return;
+        }
+
+        renderRemoteAnalysis(data);
+      } catch (error) {
+        renderSetupError({
+          error: "Nao consegui montar o mix multi-esporte.",
+          setup: [
+            "Confirme que a Function /api/daily-mixed-picks foi publicada.",
+            "Teste os botoes individuais de futebol, basquete e volei.",
+            "Se a OddsPapi estiver sem cota, o mix deve continuar sem e-sports."
+          ]
+        });
+      } finally {
+        triggerButton.disabled = false;
+        triggerButton.innerHTML = originalHtml;
+      }
+    }
+
     function updateScreenshotSummary() {
       const files = Array.from(screenshotInput.files || []);
       if (!files.length) {
@@ -3379,6 +3463,11 @@
 
     dailyPicksBtn.addEventListener("click", () => {
       runDailyPicks();
+      saveState();
+    });
+
+    mixedPicksBtn.addEventListener("click", () => {
+      runMixedPicks();
       saveState();
     });
 

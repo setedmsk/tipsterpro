@@ -30,6 +30,7 @@ netlify/functions/                 Backend do app
   daily-basketball-picks.mts       Palpites de basquete
   daily-volleyball-picks.mts       Palpites de volei
   daily-esports-picks.mts          Palpites de e-sports
+  daily-mixed-picks.mts            Mix multi-esporte
   health.mts                       Status do backend
 ```
 
@@ -95,6 +96,7 @@ npx netlify deploy --prod
 - `GET|POST /api/daily-basketball-picks`
 - `GET|POST /api/daily-volleyball-picks`
 - `GET|POST /api/daily-esports-picks`
+- `GET|POST /api/daily-mixed-picks`
 
 ## Notas do projeto
 
