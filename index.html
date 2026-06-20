@@ -956,6 +956,53 @@
       white-space: nowrap;
     }
 
+    .sport-game {
+      display: inline-grid;
+      grid-template-columns: 22px minmax(0, 1fr);
+      align-items: start;
+      gap: 7px;
+      max-width: 100%;
+    }
+
+    .sport-icon {
+      display: inline-flex;
+      width: 22px;
+      height: 22px;
+      align-items: center;
+      justify-content: center;
+      border: 1px solid rgba(168, 85, 247, 0.24);
+      border-radius: 999px;
+      background: rgba(168, 85, 247, 0.1);
+      font-size: 13px;
+      line-height: 1;
+      box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.035);
+    }
+
+    .sport-icon-football {
+      border-color: rgba(49, 247, 164, 0.24);
+      background: rgba(49, 247, 164, 0.09);
+    }
+
+    .sport-icon-basketball {
+      border-color: rgba(243, 178, 78, 0.26);
+      background: rgba(243, 178, 78, 0.1);
+    }
+
+    .sport-icon-volleyball {
+      border-color: rgba(37, 217, 255, 0.24);
+      background: rgba(37, 217, 255, 0.09);
+    }
+
+    .sport-icon-esports {
+      border-color: rgba(168, 85, 247, 0.32);
+      background: rgba(168, 85, 247, 0.12);
+    }
+
+    .sport-game-name {
+      min-width: 0;
+      overflow-wrap: anywhere;
+    }
+
     .warning-list {
       display: grid;
       gap: 8px;
@@ -1610,6 +1657,7 @@
     const BETANO_URL = "https://www.betano.bet.br/";
     let lastHealthStatus = null;
     let remoteRawPicks = [];
+    let remoteSourceProvider = "";
     let ticketCopyCounter = 0;
     const ticketCopyStore = new Map();
 
@@ -2175,6 +2223,47 @@
       return selection && (selection.bookmaker || selection.book || selection.sportsbook || selection.sourceBookmaker || "");
     }
 
+    function selectionSportMeta(selection) {
+      const text = normalizeTextForDisplay([
+        selection && selection.sport,
+        selection && selection.sourceProvider,
+        selection && selection.provider,
+        selection && selection.league,
+        selection && selection.competition,
+        selection && selection.tournament,
+        selection && selection.market,
+        selection && selection.category,
+        selection && selection.game,
+        remoteSourceProvider
+      ].filter(Boolean).join(" "));
+
+      if (text.includes("basket") || text.includes("nba") || text.includes("wnba")) {
+        return { icon: "🏀", label: "Basquete", className: "basketball" };
+      }
+      if (text.includes("volley") || text.includes("volei") || text.includes("voleibol")) {
+        return { icon: "🏐", label: "Volei", className: "volleyball" };
+      }
+      if (text.includes("futebol") || text.includes("football") || text.includes("soccer") || text.includes("api football")) {
+        return { icon: "⚽", label: "Futebol", className: "football" };
+      }
+      if (text.includes("e sports") || text.includes("esports") || text.includes("oddspapi") || text.includes("odds papi") || text.includes("counter strike") || text.includes("valorant") || text.includes("dota") || text.includes("league of legends")) {
+        return { icon: "🎮", label: "E-sports", className: "esports" };
+      }
+      return { icon: "⚽", label: "Futebol", className: "football" };
+    }
+
+    function renderGameCell(selection) {
+      const repaired = repairRemoteSelection(selection || {});
+      const game = formatGameName(repaired);
+      const sport = selectionSportMeta(repaired);
+      return [
+        "<span class=\"sport-game\" title=\"" + escapeHtml(sport.label) + "\">",
+        "<span class=\"sport-icon sport-icon-" + escapeHtml(sport.className) + "\" aria-hidden=\"true\">" + sport.icon + "</span>",
+        "<span class=\"sport-game-name\">" + escapeHtml(game) + "</span>",
+        "</span>"
+      ].join("");
+    }
+
     function ticketCopyText(title, selections, totalOdd, possibleReturn) {
       const lines = [
         title,
@@ -2242,7 +2331,6 @@
 
     function renderRemoteSelection(selection) {
       const repaired = repairRemoteSelection(selection);
-      const game = formatGameName(repaired);
       const rawMarket = repaired.market || repaired.category || "Mercado";
       const market = formatMarketName(rawMarket);
       const pick = formatSelectionName(repaired.selection || repaired.pick || repaired.value || "--", rawMarket);
@@ -2250,7 +2338,7 @@
       const probability = formatProbability(repaired.impliedProbability);
       const bookmaker = bookmakerLabel(repaired);
       const source = bookmaker ? " | " + bookmaker : "";
-      return "<tr><td>" + escapeHtml(game) + "</td><td>" + escapeHtml(market + " - " + pick + source) + "</td><td>" + escapeHtml(odd + " / " + probability) + "</td></tr>";
+      return "<tr><td>" + renderGameCell(repaired) + "</td><td>" + escapeHtml(market + " - " + pick + source) + "</td><td>" + escapeHtml(odd + " / " + probability) + "</td></tr>";
     }
 
     function formatGameName(selection) {
@@ -2778,14 +2866,14 @@
         : totalOdd ? totalOdd * Number(stakeInput.value || 5) : null;
       const reason = formatDisplayText(recommendation.reason || recommendation.summary || recommendation.explanation || recommendation.text || "");
       const rows = recommendationSelections.map((selection) => {
-        const game = formatGameName(selection);
-        const rawMarket = selection.market || selection.category || "Mercado";
+        const repaired = repairRemoteSelection(selection);
+        const rawMarket = repaired.market || repaired.category || "Mercado";
         const market = formatMarketName(rawMarket);
-        const pick = formatSelectionName(selection.selection || selection.pick || selection.value || "--", rawMarket);
-        const odd = selection.odd ? formatOdd(Number(selection.odd)) : "--";
-        const bookmaker = bookmakerLabel(selection);
+        const pick = formatSelectionName(repaired.selection || repaired.pick || repaired.value || "--", rawMarket);
+        const odd = repaired.odd ? formatOdd(Number(repaired.odd)) : "--";
+        const bookmaker = bookmakerLabel(repaired);
         const source = bookmaker ? " | " + bookmaker : "";
-        return "<tr><td>" + escapeHtml(game) + "</td><td>" + escapeHtml(market + " - " + pick + source) + "</td><td>" + escapeHtml(odd) + "</td></tr>";
+        return "<tr><td>" + renderGameCell(repaired) + "</td><td>" + escapeHtml(market + " - " + pick + source) + "</td><td>" + escapeHtml(odd) + "</td></tr>";
       }).join("");
 
       return [
@@ -2822,6 +2910,7 @@
       applyRemoteMetrics(data);
       const analysis = data.analysis || {};
       const source = data.source || {};
+      remoteSourceProvider = source.provider || "";
       const summary = formatDisplayText(analysis.summary || "An\u00e1lise autom\u00e1tica conclu\u00edda com os dados encontrados.");
       const unmatched = source.unmatchedGames || [];
       const isPrintAnalysis = String(source.provider || "").toLowerCase().includes("print");
