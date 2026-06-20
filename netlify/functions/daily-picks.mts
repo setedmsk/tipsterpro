@@ -15,7 +15,7 @@ const DEFAULT_MAX_SELECTIONS = 4;
 const DAILY_GAME_LIMIT = 5;
 const DAILY_FIXTURE_CANDIDATE_LIMIT = 6;
 const DAILY_ODDS_BATCH_SIZE = 2;
-const REPORT_CACHE_VERSION = "manual-br-v1";
+const REPORT_CACHE_VERSION = "manual-br-v2";
 
 type DailyScope =
   | "all"
@@ -340,8 +340,34 @@ function requestedMarketCategories(markets: unknown) {
   return [...new Set(categories)];
 }
 
-function isUnsupportedMarket(market: string) {
-  const normalized = normalizeText(market);
+function hasTimeSegment(value: string) {
+  const normalized = normalizeText(value);
+  return [
+    "first half",
+    "second half",
+    "1st half",
+    "2nd half",
+    "half time",
+    "halftime",
+    "first period",
+    "second period",
+    "1st period",
+    "2nd period",
+    "primeiro tempo",
+    "segundo tempo",
+    "1 tempo",
+    "2 tempo",
+    "0m 15m",
+    "15m 30m",
+    "30m 45m",
+    "45m 60m",
+    "60m 75m",
+    "75m 90m",
+  ].some((fragment) => normalized.includes(fragment));
+}
+
+function isUnsupportedMarket(market: string, selection = "") {
+  const normalized = normalizeText(`${market} ${selection}`);
   return [
     "correct score",
     "exact score",
@@ -366,10 +392,98 @@ function isUnsupportedMarket(market: string) {
     "first period",
     "second period",
     "result/both teams",
+    "result both teams",
     "corner winner",
     "corners winner",
     "card winner",
-  ].some((fragment) => normalized.includes(fragment));
+    "tackle",
+    "tackles",
+    "throw in",
+    "throwins",
+    "throw ins",
+  ].some((fragment) => normalized.includes(fragment)) || hasTimeSegment(`${market} ${selection}`);
+}
+
+function hasOverUnderLine(value: string) {
+  const plain = String(value || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(",", ".");
+  return /\b(over|under|mais de|menos de)\s+\d+(\.\d+)?\b/.test(plain);
+}
+
+function isComboSelection(selection: string) {
+  const normalized = normalizeText(selection);
+  return String(selection || "").includes("/") || normalized.includes(" and ") || normalized.includes(" e ");
+}
+
+function isWholeGameGoalsMarket(market: string, selection: string) {
+  const normalized = normalizeText(market);
+  if (!hasOverUnderLine(selection)) return false;
+  if (isComboSelection(selection)) return false;
+  if (["home", "away", "team", "home team", "away team"].some((fragment) => normalized.includes(fragment))) return false;
+  return (
+    normalized === "total" ||
+    normalized === "over under" ||
+    normalized.includes("total goals") ||
+    normalized.includes("goals over under") ||
+    normalized.includes("goal line") ||
+    normalized.includes("gols totais") ||
+    normalized.includes("total de gols") ||
+    normalized.includes("mais menos gols")
+  );
+}
+
+function isSimpleYesNo(selection: string) {
+  return ["yes", "no", "sim", "nao"].includes(normalizeText(selection));
+}
+
+function isSimpleResultSelection(selection: string) {
+  return ["home", "away", "draw", "1", "2", "x"].includes(normalizeText(selection));
+}
+
+function isSimpleDoubleChance(selection: string) {
+  const normalized = normalizeText(selection);
+  return [
+    "home draw",
+    "draw home",
+    "away draw",
+    "draw away",
+    "home away",
+    "away home",
+    "1x",
+    "x1",
+    "x2",
+    "2x",
+    "12",
+    "21",
+  ].includes(normalized);
+}
+
+function isStandardPickMarket(category: MarketCategory, market: string, selection: string) {
+  if (isUnsupportedMarket(market, selection)) return false;
+
+  const normalizedMarket = normalizeText(market);
+  if (category === "mais_menos_gols") return isWholeGameGoalsMarket(market, selection);
+  if (category === "ambas_marcam") return isSimpleYesNo(selection);
+  if (category === "resultado_final") return isSimpleResultSelection(selection);
+  if (category === "dupla_chance") return isSimpleDoubleChance(selection);
+  if (category === "escanteios") {
+    return hasOverUnderLine(selection) && !isComboSelection(selection) && (
+      normalizedMarket.includes("corner") ||
+      normalizedMarket.includes("escanteio") ||
+      normalizedMarket.includes("canto")
+    );
+  }
+  if (category === "cartoes") {
+    return hasOverUnderLine(selection) && !isComboSelection(selection);
+  }
+  if (category === "chutes_gol") {
+    return hasOverUnderLine(selection) && !isComboSelection(selection);
+  }
+
+  return false;
 }
 
 function displaySelection(selection: string, fixture: ApiFootballFixture, market: string) {
@@ -448,6 +562,7 @@ function displayMarket(market: string, fixture: ApiFootballFixture) {
     return hasOverUnder ? `${base} - Mais/Menos` : base;
   }
 
+  if (normalized === "total" || normalized === "over under") return "Total de gols - Mais/Menos";
   if (normalized.includes("goal") || normalized.includes("gol")) {
     const base = sideLabel("Gols");
     return hasOverUnder ? `${base} - Mais/Menos` : base;
@@ -496,6 +611,7 @@ function collectOddsValues(bookmakers: any[]) {
         const category = marketCategory(market, selection);
 
         if (category === "outros") continue;
+        if (!isStandardPickMarket(category, market, selection)) continue;
         if (!Number.isFinite(odd) || odd < 1.12 || odd > 2.35) continue;
 
         const key = normalizeText(`${category}|${market}|${selection}`);
