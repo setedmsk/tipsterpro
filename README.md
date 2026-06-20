@@ -1,6 +1,6 @@
-# Tipster PRO
+# Sete PRO
 
-Tipster PRO e um painel simples para transformar jogos, prints e odds em uma analise mais organizada.
+Sete PRO e um painel simples para transformar jogos, prints e odds em uma analise mais organizada.
 
 A ideia do projeto e bem direta: voce informa os jogos ou envia um print da bet, o app cruza com dados de API quando possivel, limpa mercados confusos e entrega bilhetes mais faceis de conferir na casa de aposta.
 
