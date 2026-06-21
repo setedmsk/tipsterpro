@@ -477,14 +477,25 @@ function bestPicksForEvent(event: ApiEvent, oddsResponse: any[], sport: SportKey
 async function fetchWindowEvents(sport: SportKey, date: string) {
   const searchedDates = [date, addDays(date, 1), addDays(date, 2)];
   const all: ApiEvent[] = [];
+  const dateErrors: string[] = [];
 
   for (const itemDate of searchedDates) {
-    const events = await apiSports(sport, SPORTS[sport].eventsPath, {
-      date: itemDate,
-      timezone: DEFAULT_TIMEZONE,
-    });
-    all.push(...events);
+    try {
+      const events = await apiSports(sport, SPORTS[sport].eventsPath, {
+        date: itemDate,
+        timezone: DEFAULT_TIMEZONE,
+      });
+      all.push(...events);
+    } catch (error: any) {
+      dateErrors.push(`${itemDate}: ${error?.message || "erro ao buscar jogos"}`);
+      if (!all.length && itemDate === date) continue;
+      break;
+    }
     if (all.filter(isPreEvent).length >= CANDIDATE_LIMIT) break;
+  }
+
+  if (!all.length && dateErrors.length) {
+    throw new Error(dateErrors.join(" | "));
   }
 
   const seen = new Set<number>();
