@@ -828,6 +828,119 @@
       color: #ead6ff;
     }
 
+    .ticket-actions .btn-share {
+      border-color: rgba(59, 205, 255, 0.28);
+      background: rgba(59, 205, 255, 0.1);
+      color: #d8f7ff;
+    }
+
+    .history-summary {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+    }
+
+    .history-stat {
+      padding: 10px;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: rgba(255, 255, 255, 0.025);
+    }
+
+    .history-stat span {
+      display: block;
+      color: var(--muted);
+      font-size: 10px;
+      font-weight: 900;
+      letter-spacing: 0.02em;
+      text-transform: uppercase;
+    }
+
+    .history-stat strong {
+      display: block;
+      margin-top: 5px;
+      color: var(--ink);
+      font-size: 18px;
+    }
+
+    .history-list {
+      display: grid;
+      gap: 10px;
+    }
+
+    .history-ticket {
+      padding: 11px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: rgba(255, 255, 255, 0.025);
+    }
+
+    .history-ticket header {
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      margin: 0 0 8px;
+    }
+
+    .history-ticket h4 {
+      margin: 0;
+      color: var(--ink);
+      font-size: 13px;
+      line-height: 1.25;
+    }
+
+    .history-ticket p {
+      margin: 7px 0 0;
+    }
+
+    .history-status {
+      align-self: flex-start;
+      padding: 5px 8px;
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      font-size: 10px;
+      font-weight: 900;
+      white-space: nowrap;
+      text-transform: uppercase;
+    }
+
+    .history-status-won {
+      border-color: rgba(49, 247, 164, 0.3);
+      background: rgba(49, 247, 164, 0.12);
+      color: #c9ffe4;
+    }
+
+    .history-status-lost {
+      border-color: rgba(255, 99, 114, 0.34);
+      background: rgba(255, 99, 114, 0.12);
+      color: #ffc4cb;
+    }
+
+    .history-status-pending {
+      border-color: rgba(59, 205, 255, 0.28);
+      background: rgba(59, 205, 255, 0.1);
+      color: #d8f7ff;
+    }
+
+    .history-status-review,
+    .history-status-mixed {
+      border-color: rgba(243, 178, 78, 0.3);
+      background: rgba(243, 178, 78, 0.12);
+      color: #ffd999;
+    }
+
+    .history-actions {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 8px;
+      margin-top: 10px;
+    }
+
+    .history-actions .btn {
+      min-height: 38px;
+      font-size: 12px;
+    }
+
     .game-analysis {
       display: grid;
       gap: 10px;
@@ -1231,7 +1344,11 @@
       }
 
       .ticket-actions {
-        grid-template-columns: 1fr 1fr;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+      }
+
+      .history-actions {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
       }
 
       .segmented,
@@ -1476,6 +1593,14 @@
                   </svg>
                   <span class="btn-label">Acertos do dia</span>
                 </button>
+                <button class="btn btn-secondary" type="button" id="historyBtn" title="Ver bilhetes salvos neste aparelho">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
+                    <path d="M3 12a9 9 0 1 0 3-6.7"></path>
+                    <path d="M3 4v5h5"></path>
+                    <path d="M12 7v5l3 2"></path>
+                  </svg>
+                  <span class="btn-label">Hist&oacute;rico</span>
+                </button>
                 <div class="push-actions">
                   <button class="btn btn-secondary" type="button" id="pushAlertsBtn" title="Ativar notificacoes push do Sete PRO">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
@@ -1552,8 +1677,8 @@
                   <path d="M4 19h16"></path>
                   <path d="M7 15l4-4 3 3 5-7"></path>
                 </svg>
-                <strong>Aguardando bilhete</strong>
-                <span>Envie um print da Bet, digite jogos para analisar ou carregue palpites de hoje.</span>
+                <strong>Comece em 3 passos</strong>
+                <span>1. Envie um print ou toque em um bot&atilde;o de hoje. 2. Confira o bilhete. 3. Use Hist&oacute;rico e Acertos do dia para acompanhar.</span>
               </div>
             </div>
           </div>
@@ -1662,6 +1787,7 @@
     const dailyPicksBtn = document.getElementById("dailyPicksBtn");
     const mixedPicksBtn = document.getElementById("mixedPicksBtn");
     const settledPicksBtn = document.getElementById("settledPicksBtn");
+    const historyBtn = document.getElementById("historyBtn");
     const pushAlertsBtn = document.getElementById("pushAlertsBtn");
     const pushStatusEl = document.getElementById("pushStatus");
     const combatCourtBtn = document.getElementById("combatCourtBtn");
@@ -1684,6 +1810,9 @@
     let remoteSourceProvider = "";
     let ticketCopyCounter = 0;
     const ticketCopyStore = new Map();
+    const ticketActionStore = new Map();
+    const HISTORY_KEY = "seteProTicketHistoryV1";
+    const HISTORY_LIMIT = 80;
 
     const sampleTicket = {
       games: [
@@ -2288,6 +2417,464 @@
       ].join("");
     }
 
+    function newHistoryId() {
+      if (window.crypto && typeof window.crypto.randomUUID === "function") {
+        return window.crypto.randomUUID();
+      }
+      return "ticket-" + Date.now() + "-" + Math.random().toString(16).slice(2);
+    }
+
+    function readTicketHistory() {
+      try {
+        const parsed = JSON.parse(localStorage.getItem(HISTORY_KEY) || "[]");
+        return Array.isArray(parsed) ? parsed : [];
+      } catch {
+        return [];
+      }
+    }
+
+    function writeTicketHistory(history) {
+      try {
+        const sorted = history
+          .filter((ticket) => ticket && Array.isArray(ticket.selections) && ticket.selections.length)
+          .sort((a, b) => String(b.createdAt || "").localeCompare(String(a.createdAt || "")))
+          .slice(0, HISTORY_LIMIT);
+        localStorage.setItem(HISTORY_KEY, JSON.stringify(sorted));
+        return sorted;
+      } catch {
+        return history;
+      }
+    }
+
+    function normalizeHistoryStatus(status) {
+      const value = String(status || "").toLowerCase();
+      if (["won", "lost", "pending", "void", "review", "mixed"].includes(value)) return value;
+      return "pending";
+    }
+
+    function historyStatusLabel(status) {
+      const value = normalizeHistoryStatus(status);
+      if (value === "won") return "Bateu";
+      if (value === "lost") return "Nao bateu";
+      if (value === "void") return "Anulada";
+      if (value === "review") return "Conferir";
+      if (value === "mixed") return "Parcial";
+      return "Pendente";
+    }
+
+    function normalizeHistorySelection(selection) {
+      const repaired = repairRemoteSelection(selection || {});
+      const market = repaired.market || repaired.category || "Mercado";
+      const pick = repaired.selection || repaired.pick || repaired.value || "--";
+      const odd = Number(repaired.odd);
+      return {
+        fixtureId: repaired.fixtureId || repaired.fixture_id || null,
+        sport: repaired.sport || "",
+        game: formatGameName(repaired),
+        market,
+        category: repaired.category || selectionCategory(repaired),
+        selection: pick,
+        odd: Number.isFinite(odd) && odd > 1 ? Number(odd.toFixed(2)) : null,
+        bookmaker: bookmakerLabel(repaired),
+        startsAt: repaired.startsAt || repaired.date || repaired.time || "",
+        status: normalizeHistoryStatus(repaired.status),
+        result: repaired.result || "",
+        reason: repaired.reason || ""
+      };
+    }
+
+    function historySelectionSignature(selection) {
+      const normalized = normalizeHistorySelection(selection || {});
+      const game = normalizeTextForDisplay(normalized.game);
+      const market = normalizeTextForDisplay(normalized.market || normalized.category);
+      const pick = normalizeTextForDisplay(normalized.selection);
+      const odd = Number(normalized.odd);
+      return [
+        normalized.fixtureId || game,
+        market,
+        pick,
+        Number.isFinite(odd) ? odd.toFixed(2) : ""
+      ].join("|");
+    }
+
+    function historyTicketSignatureFromSelections(selections) {
+      return (selections || [])
+        .map(historySelectionSignature)
+        .sort()
+        .join("::");
+    }
+
+    function computeHistoryTicketStatus(ticket) {
+      const selections = Array.isArray(ticket && ticket.selections) ? ticket.selections : [];
+      if (!selections.length) return "pending";
+      const statuses = selections.map((selection) => normalizeHistoryStatus(selection.status));
+      if (statuses.includes("lost")) return "lost";
+      if (statuses.every((status) => status === "void")) return "void";
+      if (statuses.every((status) => status === "won" || status === "void")) return "won";
+      if (statuses.some((status) => status === "won" || status === "void") && statuses.some((status) => status === "pending")) return "mixed";
+      if (statuses.includes("review")) return "review";
+      return "pending";
+    }
+
+    function buildHistoryTicket(title, selections, totalOdd, possibleReturn, meta = {}) {
+      const normalizedSelections = (selections || [])
+        .map(normalizeHistorySelection)
+        .filter((selection) => selection.game && !isGenericDisplayGameName(selection.game));
+      if (!normalizedSelections.length) return null;
+
+      const odds = normalizedSelections.map((selection) => Number(selection.odd)).filter((odd) => Number.isFinite(odd) && odd > 1);
+      const safeTotalOdd = Number(totalOdd) > 1 ? Number(totalOdd) : (odds.length ? product(odds) : null);
+      const stake = Number(meta.stake || stakeInput.value || 5);
+      const safeReturn = Number(possibleReturn) > 0 ? Number(possibleReturn) : (safeTotalOdd ? safeTotalOdd * stake : null);
+      const ticket = {
+        id: newHistoryId(),
+        title: title || "Bilhete",
+        createdAt: new Date().toISOString(),
+        lastSeenAt: new Date().toISOString(),
+        date: meta.date || analysisDateInput.value || todayInSaoPaulo(),
+        sourceProvider: meta.provider || remoteSourceProvider || "Sete PRO",
+        sourceKind: meta.kind || "analise",
+        stake,
+        totalOdd: safeTotalOdd ? Number(safeTotalOdd.toFixed(2)) : null,
+        possibleReturn: safeReturn ? Number(safeReturn.toFixed(2)) : null,
+        selections: normalizedSelections,
+        status: "pending"
+      };
+      ticket.signature = historyTicketSignatureFromSelections(ticket.selections);
+      ticket.status = computeHistoryTicketStatus(ticket);
+      return ticket.signature ? ticket : null;
+    }
+
+    function mergeTicketHistory(newTickets) {
+      const history = readTicketHistory();
+      const bySignature = new Map();
+      history.forEach((ticket) => {
+        if (ticket && ticket.signature) bySignature.set(ticket.signature, ticket);
+      });
+
+      newTickets.filter(Boolean).forEach((ticket) => {
+        const existing = bySignature.get(ticket.signature);
+        if (existing) {
+          bySignature.set(ticket.signature, {
+            ...existing,
+            ...ticket,
+            id: existing.id || ticket.id,
+            createdAt: existing.createdAt || ticket.createdAt,
+            status: normalizeHistoryStatus(existing.status) === "pending" ? ticket.status : existing.status,
+            selections: ticket.selections.map((selection, index) => ({
+              ...selection,
+              status: normalizeHistoryStatus(existing.selections && existing.selections[index] && existing.selections[index].status) === "pending"
+                ? normalizeHistoryStatus(selection.status)
+                : normalizeHistoryStatus(existing.selections && existing.selections[index] && existing.selections[index].status)
+            })),
+            lastSeenAt: new Date().toISOString()
+          });
+        } else {
+          bySignature.set(ticket.signature, ticket);
+        }
+      });
+
+      return writeTicketHistory(Array.from(bySignature.values()));
+    }
+
+    function saveHistoryTicketsFromAnalysis(data) {
+      const analysis = data && data.analysis ? data.analysis : {};
+      const source = data && data.source ? data.source : {};
+      const meta = {
+        date: source.date || analysisDateInput.value || todayInSaoPaulo(),
+        provider: source.provider || remoteSourceProvider || "Sete PRO",
+        kind: String(source.provider || "").toLowerCase().includes("print") ? "print" : "analise",
+        stake: Number(stakeInput.value || 5)
+      };
+      const candidates = [
+        ["Minha recomendacao principal", analysis.mainRecommendation],
+        ["Bilhete conservador", analysis.conservativeTicket],
+        ["Bilhete equilibrado", analysis.balancedTicket || analysis.recommendedTicket],
+        ["Bilhete ousado", analysis.boldTicket]
+      ];
+
+      const tickets = [];
+      const seen = new Set();
+      candidates.forEach(([title, ticket]) => {
+        const selections = getRemoteTicketSelections(ticket);
+        if (!selections.length) return;
+        const totalOdd = getRemoteTicketOdd(ticket, selections);
+        const possibleReturn = totalOdd ? totalOdd * Number(stakeInput.value || 5) : null;
+        const historyTicket = buildHistoryTicket(title, selections, totalOdd, possibleReturn, meta);
+        if (!historyTicket || seen.has(historyTicket.signature)) return;
+        seen.add(historyTicket.signature);
+        tickets.push(historyTicket);
+      });
+
+      if (tickets.length) mergeTicketHistory(tickets);
+      return tickets.length;
+    }
+
+    function historySettlementKeys(selection) {
+      const normalized = normalizeHistorySelection(selection || {});
+      const game = normalizeTextForDisplay(normalized.game);
+      const market = normalizeTextForDisplay(normalized.market || normalized.category);
+      const category = normalizeTextForDisplay(normalized.category || selectionCategory(normalized));
+      const pick = normalizeTextForDisplay(normalized.selection);
+      const keys = [
+        [normalized.fixtureId || game, category || market, pick].join("|"),
+        [normalized.fixtureId || game, market, pick].join("|"),
+        [game, category || market, pick].join("|")
+      ];
+      return Array.from(new Set(keys.filter((key) => key.replace(/\|/g, "").trim())));
+    }
+
+    function updateHistoryWithSettlement(data) {
+      const items = Array.isArray(data && data.items) ? data.items : [];
+      if (!items.length) return readTicketHistory();
+
+      const resultMap = new Map();
+      items.forEach((item) => {
+        historySettlementKeys(item).forEach((key) => {
+          resultMap.set(key, item);
+        });
+      });
+
+      const updated = readTicketHistory().map((ticket) => {
+        const selections = (ticket.selections || []).map((selection) => {
+          const match = historySettlementKeys(selection).map((key) => resultMap.get(key)).find(Boolean);
+          if (!match) return selection;
+          return {
+            ...selection,
+            status: normalizeHistoryStatus(match.status),
+            result: match.result || selection.result || "",
+            reason: match.reason || selection.reason || ""
+          };
+        });
+        const next = {
+          ...ticket,
+          selections,
+          status: computeHistoryTicketStatus({ ...ticket, selections }),
+          lastSettledAt: new Date().toISOString()
+        };
+        return next;
+      });
+
+      return writeTicketHistory(updated);
+    }
+
+    function ticketCopyTextFromHistory(ticket) {
+      const totalOdd = Number(ticket.totalOdd);
+      const possibleReturn = Number(ticket.possibleReturn);
+      return ticketCopyText(ticket.title || "Bilhete salvo", ticket.selections || [], totalOdd > 1 ? totalOdd : null, possibleReturn > 0 ? possibleReturn : null);
+    }
+
+    function registerTicketAction(payload) {
+      const id = "ticket-" + (++ticketCopyCounter);
+      ticketActionStore.set(id, payload);
+      ticketCopyStore.set(id, payload.text || "");
+      return id;
+    }
+
+    function ticketProfit(ticket) {
+      const stake = Number(ticket.stake || 0);
+      const possibleReturn = Number(ticket.possibleReturn || 0);
+      const status = computeHistoryTicketStatus(ticket);
+      if (status === "won") return Math.max(possibleReturn - stake, 0);
+      if (status === "lost") return -stake;
+      return 0;
+    }
+
+    function renderHistorySummary(history) {
+      const closed = history.filter((ticket) => ["won", "lost"].includes(computeHistoryTicketStatus(ticket)));
+      const won = history.filter((ticket) => computeHistoryTicketStatus(ticket) === "won").length;
+      const lost = history.filter((ticket) => computeHistoryTicketStatus(ticket) === "lost").length;
+      const pending = history.filter((ticket) => ["pending", "mixed", "review"].includes(computeHistoryTicketStatus(ticket))).length;
+      const stakeTotal = closed.reduce((sum, ticket) => sum + Number(ticket.stake || 0), 0);
+      const profit = history.reduce((sum, ticket) => sum + ticketProfit(ticket), 0);
+      const roi = stakeTotal > 0 ? (profit / stakeTotal) * 100 : 0;
+      const winRate = closed.length ? (won / closed.length) * 100 : 0;
+      return [
+        "<div class=\"history-summary\">",
+        "<div class=\"history-stat\"><span>Bilhetes</span><strong>" + escapeHtml(history.length) + "</strong></div>",
+        "<div class=\"history-stat\"><span>Pendentes</span><strong>" + escapeHtml(pending) + "</strong></div>",
+        "<div class=\"history-stat\"><span>Taxa acerto</span><strong>" + escapeHtml(closed.length ? winRate.toFixed(0) + "%" : "--") + "</strong></div>",
+        "<div class=\"history-stat\"><span>ROI local</span><strong>" + escapeHtml(stakeTotal > 0 ? roi.toFixed(0).replace(".", ",") + "%" : "--") + "</strong></div>",
+        "</div>",
+        "<p class=\"muted\">Bateram: " + escapeHtml(won) + " | Nao bateram: " + escapeHtml(lost) + " | Lucro local: " + escapeHtml(currency.format(profit)) + "</p>"
+      ].join("");
+    }
+
+    function renderHistoryTicket(ticket) {
+      const status = computeHistoryTicketStatus(ticket);
+      const rows = (ticket.selections || []).slice(0, 7).map((selection) => {
+        const market = formatMarketName(selection.market || selection.category || "Mercado");
+        const pick = formatSelectionName(selection.selection || "--", selection.market || selection.category || "");
+        const odd = selection.odd ? formatOdd(Number(selection.odd)) : "--";
+        const statusLabel = historyStatusLabel(selection.status || "pending");
+        return "<tr><td>" + renderGameCell(selection) + "</td><td>" + escapeHtml(market + " - " + pick) + "</td><td>" + escapeHtml(odd) + "</td><td>" + escapeHtml(statusLabel) + "</td></tr>";
+      }).join("");
+      const text = ticketCopyTextFromHistory(ticket);
+      const actionId = registerTicketAction({ text, ticket });
+      return [
+        "<div class=\"history-ticket\">",
+        "<header><h4>" + escapeHtml(ticket.title || "Bilhete") + "</h4><span class=\"history-status history-status-" + escapeHtml(status) + "\">" + escapeHtml(historyStatusLabel(status)) + "</span></header>",
+        "<p class=\"muted\">" + escapeHtml(formatDateTime(ticket.createdAt)) + " | " + escapeHtml(ticket.sourceProvider || "Sete PRO") + (ticket.totalOdd ? " | Odd " + escapeHtml(formatOdd(Number(ticket.totalOdd))) : "") + (ticket.possibleReturn ? " | Retorno " + escapeHtml(currency.format(Number(ticket.possibleReturn))) : "") + "</p>",
+        "<table class=\"analysis-table\"><thead><tr><th>Jogo</th><th>Entrada</th><th>Odd</th><th>Status</th></tr></thead><tbody>",
+        rows || "<tr><td colspan=\"4\">Sem selecoes salvas.</td></tr>",
+        "</tbody></table>",
+        "<div class=\"history-actions\"><button class=\"btn btn-copy\" type=\"button\" data-copy-ticket-id=\"" + escapeHtml(actionId) + "\">Copiar bilhete</button><button class=\"btn btn-share\" type=\"button\" data-share-ticket-id=\"" + escapeHtml(actionId) + "\">Compartilhar</button></div>",
+        "</div>"
+      ].join("");
+    }
+
+    function renderHistoryReport(focusDate) {
+      ticketCopyStore.clear();
+      ticketActionStore.clear();
+      ticketCopyCounter = 0;
+      const date = focusDate || analysisDateInput.value || todayInSaoPaulo();
+      const history = readTicketHistory();
+      const dayHistory = history.filter((ticket) => !date || ticket.date === date);
+      const list = dayHistory.length ? dayHistory : history.slice(0, 12);
+      const title = dayHistory.length ? "Historico do dia" : "Historico recente";
+      outputEl.innerHTML = [
+        "<article class=\"analysis-card\" data-tone=\"baixo\">",
+        "<header><h3>" + title + "</h3><span class=\"tag\">Local</span></header>",
+        "<div class=\"content ticket-list\">",
+        history.length ? renderHistorySummary(dayHistory.length ? dayHistory : history) : "<p>Nenhum bilhete salvo ainda. Gere uma analise para comecar o historico.</p>",
+        "</div>",
+        "</article>",
+        "<article class=\"analysis-card\" data-tone=\"medio\">",
+        "<header><h3>Bilhetes salvos</h3><span class=\"tag\">" + escapeHtml(list.length) + "</span></header>",
+        "<div class=\"content history-list\">",
+        list.length ? list.map(renderHistoryTicket).join("") : "<p>Quando o Sete PRO montar um bilhete, ele aparece aqui automaticamente.</p>",
+        "</div>",
+        "</article>"
+      ].join("");
+    }
+
+    function appendHistorySnapshot(focusDate) {
+      const history = readTicketHistory().filter((ticket) => !focusDate || ticket.date === focusDate);
+      if (!history.length) return;
+      outputEl.insertAdjacentHTML("beforeend", [
+        "<article class=\"analysis-card\" data-tone=\"baixo\">",
+        "<header><h3>Historico local atualizado</h3><span class=\"tag\">Memoria</span></header>",
+        "<div class=\"content ticket-list\">",
+        renderHistorySummary(history),
+        "</div>",
+        "</article>"
+      ].join(""));
+    }
+
+    function wrapCanvasText(context, text, x, y, maxWidth, lineHeight, maxLines) {
+      const words = String(text || "").split(/\s+/).filter(Boolean);
+      const lines = [];
+      let line = "";
+      words.forEach((word) => {
+        const test = line ? line + " " + word : word;
+        if (context.measureText(test).width > maxWidth && line) {
+          lines.push(line);
+          line = word;
+        } else {
+          line = test;
+        }
+      });
+      if (line) lines.push(line);
+      const visible = maxLines ? lines.slice(0, maxLines) : lines;
+      visible.forEach((item, index) => {
+        const suffix = maxLines && index === maxLines - 1 && lines.length > maxLines ? "..." : "";
+        context.fillText(item + suffix, x, y + index * lineHeight);
+      });
+      return y + visible.length * lineHeight;
+    }
+
+    async function buildTicketShareFile(action) {
+      const ticket = action && action.ticket;
+      if (!ticket || !Array.isArray(ticket.selections) || !ticket.selections.length) return null;
+      const canvas = document.createElement("canvas");
+      canvas.width = 1080;
+      canvas.height = 1350;
+      const context = canvas.getContext("2d");
+      if (!context) return null;
+
+      const gradient = context.createLinearGradient(0, 0, 1080, 1350);
+      gradient.addColorStop(0, "#4c1d95");
+      gradient.addColorStop(0.45, "#090511");
+      gradient.addColorStop(1, "#030307");
+      context.fillStyle = gradient;
+      context.fillRect(0, 0, 1080, 1350);
+
+      context.fillStyle = "rgba(255,255,255,0.06)";
+      context.fillRect(54, 54, 972, 1242);
+      context.strokeStyle = "rgba(187,102,255,0.45)";
+      context.lineWidth = 3;
+      context.strokeRect(54, 54, 972, 1242);
+
+      context.fillStyle = "#ffffff";
+      context.font = "800 58px Arial";
+      context.fillText("Sete PRO", 90, 135);
+      context.fillStyle = "#c4b5fd";
+      context.font = "500 30px Arial";
+      context.fillText("Bilhete gerado pela analise", 90, 180);
+
+      context.fillStyle = "#31f7a4";
+      context.font = "800 42px Arial";
+      context.fillText(ticket.title || "Bilhete", 90, 255);
+      context.fillStyle = "#ffffff";
+      context.font = "800 48px Arial";
+      if (ticket.totalOdd) context.fillText("Odd " + formatOdd(Number(ticket.totalOdd)), 780, 255);
+
+      let y = 335;
+      ticket.selections.slice(0, 7).forEach((selection, index) => {
+        context.fillStyle = index % 2 ? "rgba(255,255,255,0.035)" : "rgba(255,255,255,0.06)";
+        context.fillRect(90, y - 42, 900, 125);
+        context.fillStyle = "#ffffff";
+        context.font = "800 28px Arial";
+        context.fillText(String(index + 1).padStart(2, "0"), 116, y);
+        context.font = "800 30px Arial";
+        wrapCanvasText(context, selection.game || "Jogo", 170, y, 560, 34, 1);
+        context.fillStyle = "#c4b5fd";
+        context.font = "500 27px Arial";
+        const market = formatMarketName(selection.market || selection.category || "Mercado");
+        const pick = formatSelectionName(selection.selection || "--", selection.market || selection.category || "");
+        wrapCanvasText(context, market + " - " + pick, 170, y + 42, 610, 32, 2);
+        context.fillStyle = "#31f7a4";
+        context.font = "800 34px Arial";
+        context.fillText(selection.odd ? formatOdd(Number(selection.odd)) : "--", 860, y + 28);
+        y += 145;
+      });
+
+      context.fillStyle = "#ffffff";
+      context.font = "800 38px Arial";
+      const returnText = ticket.possibleReturn ? "Retorno " + currency.format(Number(ticket.possibleReturn)) : "";
+      context.fillText(returnText, 90, 1195);
+      context.fillStyle = "#a89cc8";
+      context.font = "500 25px Arial";
+      context.fillText("Conferir odds e disponibilidade antes de confirmar.", 90, 1245);
+
+      const blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/png", 0.92));
+      if (!blob) return null;
+      return new File([blob], "bilhete-sete-pro.png", { type: "image/png" });
+    }
+
+    async function shareTicketAction(action) {
+      const text = action && action.text ? action.text : "";
+      const title = action && action.ticket && action.ticket.title ? action.ticket.title : "Bilhete Sete PRO";
+      if (!text) return false;
+
+      if (navigator.share) {
+        try {
+          const imageFile = await buildTicketShareFile(action);
+          if (imageFile && navigator.canShare && navigator.canShare({ files: [imageFile] })) {
+            await navigator.share({ title, text, files: [imageFile] });
+            return true;
+          }
+          await navigator.share({ title, text });
+          return true;
+        } catch (error) {
+          if (error && error.name === "AbortError") return true;
+        }
+      }
+
+      await copyTextToClipboard(text);
+      return false;
+    }
+
     function ticketCopyText(title, selections, totalOdd, possibleReturn) {
       const lines = [
         title,
@@ -2320,10 +2907,17 @@
 
     function renderTicketActions(title, selections, totalOdd, possibleReturn) {
       if (!selections.length) return "";
-      const copyId = registerTicketCopyText(ticketCopyText(title, selections, totalOdd, possibleReturn));
+      const text = ticketCopyText(title, selections, totalOdd, possibleReturn);
+      const historyTicket = buildHistoryTicket(title, selections, totalOdd, possibleReturn, {
+        date: analysisDateInput.value || todayInSaoPaulo(),
+        provider: remoteSourceProvider || "Sete PRO",
+        stake: Number(stakeInput.value || 5)
+      });
+      const copyId = registerTicketAction({ text, ticket: historyTicket });
       return [
         "<div class=\"ticket-actions\">",
         "<button class=\"btn btn-copy\" type=\"button\" data-copy-ticket-id=\"" + escapeHtml(copyId) + "\">Copiar bilhete</button>",
+        "<button class=\"btn btn-share\" type=\"button\" data-share-ticket-id=\"" + escapeHtml(copyId) + "\">Compartilhar</button>",
         "<a class=\"btn btn-book\" href=\"" + BETANO_URL + "\" target=\"_blank\" rel=\"noopener noreferrer\">Abrir Betano</a>",
         "</div>"
       ].join("");
@@ -2931,12 +3525,14 @@
 
     function renderRemoteAnalysis(data) {
       ticketCopyStore.clear();
+      ticketActionStore.clear();
       ticketCopyCounter = 0;
       remoteRawPicks = collectRemoteRepairPicks(data);
       applyRemoteMetrics(data);
       const analysis = data.analysis || {};
       const source = data.source || {};
       remoteSourceProvider = source.provider || "";
+      const savedTickets = saveHistoryTicketsFromAnalysis(data);
       const summary = formatDisplayText(analysis.summary || "An\u00e1lise autom\u00e1tica conclu\u00edda com os dados encontrados.");
       const unmatched = source.unmatchedGames || [];
       const isPrintAnalysis = String(source.provider || "").toLowerCase().includes("print");
@@ -2957,7 +3553,7 @@
         isPrintAnalysis ? renderExtractedSelections(data.extracted) : "",
         "<article class=\"analysis-card\" data-tone=\"baixo\">",
         "<header><h3>Resumo da an&aacute;lise</h3><span class=\"tag\">Motor</span></header>",
-        "<div class=\"content\"><p>" + escapeHtml(summary) + "</p></div>",
+        "<div class=\"content\"><p>" + escapeHtml(summary) + "</p>" + (savedTickets ? "<p class=\"muted\">Salvei " + escapeHtml(savedTickets) + " bilhete(s) no hist&oacute;rico deste aparelho.</p>" : "") + "</div>",
         "</article>",
         "<article class=\"analysis-card\" data-tone=\"medio\">",
         "<header><h3>An&aacute;lise jogo a jogo</h3><span class=\"tag\">Dados</span></header>",
@@ -3018,6 +3614,7 @@
     }
 
     function renderSettlementReport(data) {
+      updateHistoryWithSettlement(data);
       const summary = data.summary || {};
       const source = data.source || {};
       const items = Array.isArray(data.items) ? data.items : [];
@@ -3058,6 +3655,7 @@
         offlinePending ? "<article class=\"analysis-card\" data-tone=\"medio\"><header><h3>Aguardando placar salvo</h3><span class=\"tag\">Cache</span></header><div class=\"content\"><p>Estou em modo econ&ocirc;mico, sem chamadas externas. Quando o placar final ainda n&atilde;o estiver salvo no relat&oacute;rio, deixo como <strong>Pendente</strong> em vez de gastar API ou cravar errado.</p></div></article>" : "",
         review ? "<article class=\"analysis-card\" data-tone=\"alto\"><header><h3>O que precisa conferir</h3><span class=\"tag\">Manual</span></header><div class=\"content\"><p>Mercados como escanteios, cart&otilde;es e chutes dependem de estat&iacute;sticas que nem sempre a API entrega no p&oacute;s-jogo. Quando isso acontecer, o app deixa em <strong>Conferir</strong> em vez de cravar errado.</p></div></article>" : ""
       ].join("");
+      appendHistorySnapshot(source.date || analysisDateInput.value || todayInSaoPaulo());
     }
 
     function renderSetupError(data) {
@@ -3696,6 +4294,11 @@
       saveState();
     });
 
+    historyBtn.addEventListener("click", () => {
+      renderHistoryReport(analysisDateInput.value || todayInSaoPaulo());
+      saveState();
+    });
+
     pushAlertsBtn.addEventListener("click", () => {
       enablePushAlerts(pushAlertsBtn);
     });
@@ -3712,6 +4315,27 @@
 
     document.addEventListener("click", async (event) => {
       const target = event.target;
+      const shareButton = target && target.closest ? target.closest("[data-share-ticket-id]") : null;
+      if (shareButton) {
+        const action = ticketActionStore.get(shareButton.getAttribute("data-share-ticket-id"));
+        if (!action) return;
+
+        const originalText = shareButton.textContent;
+        shareButton.disabled = true;
+        try {
+          const shared = await shareTicketAction(action);
+          shareButton.textContent = shared ? "Compartilhado" : "Copiado";
+        } catch {
+          shareButton.textContent = "Erro ao compartilhar";
+        } finally {
+          window.setTimeout(() => {
+            shareButton.disabled = false;
+            shareButton.textContent = originalText || "Compartilhar";
+          }, 1400);
+        }
+        return;
+      }
+
       const button = target && target.closest ? target.closest("[data-copy-ticket-id]") : null;
       if (!button) return;
 
