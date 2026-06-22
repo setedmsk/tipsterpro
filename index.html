@@ -2028,13 +2028,19 @@
       }
 
       const checks = health.checks || {};
+      const statusLabel = health.overall || health.status || "status";
       const rows = [
         ["Backend", checks.backend],
         ["API-Football", checks.apiFootball],
         ["IA de print", checks.visionAi],
+        ["Basquete", checks.basketball],
+        ["Volei", checks.volleyball],
+        ["E-sports", checks.esportsOdds],
+        ["Cache interno", checks.blobs],
         ["Palpites sob demanda", checks.dailyReport]
       ].map(([label, item]) => {
-        const ok = item && item.ok !== false;
+        const optional = Boolean(item && item.optional);
+        const ok = item && (item.ok !== false || optional);
         const detail = item && (item.detail || item.schedule || "");
         const latest = item && item.latest
           ? " Ultimo: " + formatDateTime(item.latest.generatedAt) + " | jogos: " + (item.latest.gamesAnalyzed || 0) + " | picks: " + (item.latest.picksFound || 0) + "."
@@ -2046,11 +2052,24 @@
       }).join("");
 
       return [
-        "<article class=\"analysis-card\" data-tone=\"" + (health.status === "ok" ? "baixo" : "alto") + "\">",
-        "<header><h3>Status do backend</h3><span class=\"tag\">" + escapeHtml(health.status || "status") + "</span></header>",
+        "<article class=\"analysis-card\" data-tone=\"" + (statusLabel === "ok" ? "baixo" : "alto") + "\">",
+        "<header><h3>Status do backend</h3><span class=\"tag\">" + escapeHtml(statusLabel) + "</span></header>",
         "<div class=\"content\"><ul class=\"warning-list\">" + rows + "</ul><p class=\"muted\">Este status nao gasta quota da API-Football; quota/plano aparecem na chamada real de dados.</p></div>",
         "</article>"
       ].join("");
+    }
+
+    function serviceProblemLabel(health) {
+      const services = health && health.services ? health.services : {};
+      const checks = health && health.checks ? health.checks : {};
+
+      if (services.api_football && services.api_football.status !== "ok") return "API Football";
+      if (services.openai && services.openai.status !== "ok") return "OpenAI";
+      if (services.netlify_blobs && services.netlify_blobs.status !== "ok") return "Cache";
+      if (checks.apiFootball && checks.apiFootball.ok === false) return "API Football";
+      if (checks.visionAi && checks.visionAi.ok === false) return "OpenAI";
+      if (checks.blobs && checks.blobs.ok === false) return "Cache";
+      return "";
     }
 
     function setBackendStatus(state, label, title) {
@@ -2070,10 +2089,16 @@
           return;
         }
 
-        if (data.status === "ok") {
+        const overall = data.overall || data.status;
+        if (overall === "ok") {
           setBackendStatus("ok", "Backend OK", "Backend, API key e IA configurados");
         } else {
-          setBackendStatus("degraded", "Backend parcial", "Alguma integra\u00e7\u00e3o precisa de aten\u00e7\u00e3o");
+          const problem = serviceProblemLabel(data);
+          setBackendStatus(
+            overall === "down" ? "down" : "degraded",
+            problem ? problem + " aten\u00e7\u00e3o" : "Backend parcial",
+            problem ? problem + " precisa de aten\u00e7\u00e3o. Clique para ver detalhes." : "Alguma integra\u00e7\u00e3o precisa de aten\u00e7\u00e3o"
+          );
         }
       } catch (error) {
         lastHealthStatus = null;

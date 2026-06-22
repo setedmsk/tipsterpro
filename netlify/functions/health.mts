@@ -8,6 +8,17 @@ declare const Netlify: {
 
 const DEFAULT_TIMEZONE = "America/Sao_Paulo";
 
+type ServiceStatus = "ok" | "missing_key" | "warning" | "error";
+
+type ServiceHealth = {
+  status: ServiceStatus;
+  latency_ms: number | null;
+  detail: string;
+  optional?: boolean;
+  keys?: string[];
+  latest?: unknown;
+};
+
 function json(data: unknown, init: ResponseInit = {}) {
   return Response.json(data, {
     ...init,
@@ -22,62 +33,191 @@ function getEnv(name: string) {
   return Netlify.env.get(name) || "";
 }
 
-async function readLatestDailyReport() {
+function hasAnyEnv(keys: string[]) {
+  return keys.some((key) => Boolean(getEnv(key)));
+}
+
+function serviceFromKeys(keys: string[], detailOk: string, detailMissing: string, optional = false): ServiceHealth {
+  const configured = hasAnyEnv(keys);
+  return {
+    status: configured ? "ok" : "missing_key",
+    latency_ms: null,
+    detail: configured ? detailOk : detailMissing,
+    optional,
+    keys,
+  };
+}
+
+async function timed<T>(operation: () => Promise<T>) {
+  const started = Date.now();
   try {
-    const store = getStore({ name: "daily-picks", consistency: "strong" });
-    return await store.get("latest.json", { type: "json" }) as any;
-  } catch {
-    return null;
+    const value = await operation();
+    return {
+      value,
+      latency_ms: Date.now() - started,
+      error: null as unknown,
+    };
+  } catch (error) {
+    return {
+      value: null as T | null,
+      latency_ms: Date.now() - started,
+      error,
+    };
   }
 }
 
-async function readLatestDailyError() {
-  try {
-    const store = getStore({ name: "daily-picks", consistency: "strong" });
-    return await store.get("latest-error.json", { type: "json" }) as any;
-  } catch {
-    return null;
-  }
+async function readBlobJson(storeName: string, key: string) {
+  const store = getStore({ name: storeName, consistency: "strong" });
+  return await store.get(key, { type: "json" }) as any;
+}
+
+function reportSummary(report: any) {
+  if (!report || !report.source) return null;
+  return {
+    date: report.source.date,
+    generatedAt: report.source.generatedAt,
+    gamesAnalyzed: report.source.gamesAnalyzed,
+    picksFound: report.source.picksFound,
+    sportsFound: report.source.sportsFound,
+  };
+}
+
+function errorSummary(error: any) {
+  if (!error) return null;
+  return {
+    date: error.date,
+    generatedAt: error.generatedAt,
+    message: error.message || error.error || "Erro salvo sem mensagem.",
+  };
+}
+
+function overallFromRequired(apiFootball: ServiceHealth, openAi: ServiceHealth) {
+  const required = [apiFootball, openAi];
+  const okCount = required.filter((service) => service.status === "ok").length;
+  if (okCount === required.length) return "ok";
+  if (okCount === 0) return "down";
+  return "degraded";
 }
 
 export default async () => {
-  const latest = await readLatestDailyReport();
-  const latestError = await readLatestDailyError();
-  const apiFootballConfigured = Boolean(getEnv("API_FOOTBALL_KEY"));
-  const oddsPapiConfigured = Boolean(getEnv("ODDSPAPI_KEY") || getEnv("ODDS_PAPI_KEY") || getEnv("ESPORTS_ODDS_API_KEY"));
-  const openAiConfigured = Boolean(getEnv("OPENAI_BASE_URL") || getEnv("OPENAI_API_KEY"));
-  const visionConfigured = openAiConfigured;
-  const latestPicks = Number(latest?.source?.picksFound || 0);
+  const checkedAt = new Date().toISOString();
+
+  const [latestDaily, latestDailyError, latestBasketball, latestVolleyball] = await Promise.all([
+    timed(() => readBlobJson("daily-picks", "latest.json")),
+    timed(() => readBlobJson("daily-picks", "latest-error.json")),
+    timed(() => readBlobJson("daily-basketball-picks", "latest.json")),
+    timed(() => readBlobJson("daily-volleyball-picks", "latest.json")),
+  ]);
+
+  const apiFootball = serviceFromKeys(
+    ["API_FOOTBALL_KEY"],
+    "API-Football configurada. Quota/plano sao validados somente nas chamadas reais.",
+    "API_FOOTBALL_KEY ausente."
+  );
+
+  const openAi = serviceFromKeys(
+    ["OPENAI_API_KEY", "OPENAI_BASE_URL"],
+    "IA configurada para leitura de print e analise textual.",
+    "OPENAI_API_KEY ou Netlify AI Gateway ausente."
+  );
+
+  const apiBasketball = serviceFromKeys(
+    ["API_BASKETBALL_KEY", "API_SPORTS_KEY", "API_FOOTBALL_KEY"],
+    "Basquete configurado por chave especifica ou fallback API-Sports.",
+    "API_BASKETBALL_KEY ausente. Pode funcionar se API_SPORTS_KEY ou API_FOOTBALL_KEY liberar Basketball.",
+    true
+  );
+
+  const apiVolleyball = serviceFromKeys(
+    ["API_VOLLEYBALL_KEY", "API_SPORTS_KEY", "API_FOOTBALL_KEY"],
+    "Volei configurado por chave especifica ou fallback API-Sports.",
+    "API_VOLLEYBALL_KEY ausente. Pode funcionar se API_SPORTS_KEY ou API_FOOTBALL_KEY liberar Volleyball.",
+    true
+  );
+
+  const esportsOdds = serviceFromKeys(
+    ["ODDSPAPI_KEY", "ODDS_PAPI_KEY", "ESPORTS_ODDS_API_KEY"],
+    "Provider de odds para e-sports configurado.",
+    "Provider de odds para e-sports ausente. Necessario somente para palpites de e-sports.",
+    true
+  );
+
+  const blobsOk = !latestDaily.error || latestDaily.value !== null || latestDailyError.value !== null;
+  const blobs: ServiceHealth = {
+    status: blobsOk ? "ok" : "warning",
+    latency_ms: latestDaily.latency_ms,
+    detail: blobsOk
+      ? "Netlify Blobs acessivel para cache e historico de relatorios."
+      : "Nao consegui ler o cache agora. O app ainda pode gerar novos palpites sob demanda.",
+    optional: false,
+  };
+
+  apiFootball.latest = reportSummary(latestDaily.value);
+  apiBasketball.latest = reportSummary(latestBasketball.value);
+  apiVolleyball.latest = reportSummary(latestVolleyball.value);
+
+  const latestPicks = Number((latestDaily.value as any)?.source?.picksFound || 0);
   const hasUsableDailyReport = latestPicks > 0;
-  const ok = apiFootballConfigured && openAiConfigured;
+  const latestError = errorSummary(latestDailyError.value);
+  const overall = overallFromRequired(apiFootball, openAi);
+
+  const services = {
+    api_football: apiFootball,
+    openai: openAi,
+    api_basketball: apiBasketball,
+    api_volleyball: apiVolleyball,
+    esports_odds: esportsOdds,
+    netlify_blobs: blobs,
+  };
 
   return json({
-    status: ok ? "ok" : "degraded",
-    generatedAt: new Date().toISOString(),
+    overall,
+    status: overall,
+    checked_at: checkedAt,
+    generatedAt: checkedAt,
     timezone: DEFAULT_TIMEZONE,
+    services,
     checks: {
       backend: {
         ok: true,
         detail: "Netlify Functions publicadas.",
       },
       apiFootball: {
-        ok: apiFootballConfigured,
-        detail: apiFootballConfigured
-          ? "API_FOOTBALL_KEY configurada. Quota/plano sao validados na chamada real."
-          : "API_FOOTBALL_KEY ausente.",
+        ok: apiFootball.status === "ok",
+        status: apiFootball.status,
+        detail: apiFootball.detail,
+        latest: apiFootball.latest,
       },
       visionAi: {
-        ok: visionConfigured,
-        detail: visionConfigured
-          ? "IA configurada para leitura de print."
-          : "OPENAI_API_KEY ou Netlify AI Gateway ausente.",
+        ok: openAi.status === "ok",
+        status: openAi.status,
+        detail: openAi.detail,
+      },
+      basketball: {
+        ok: apiBasketball.status === "ok",
+        optional: true,
+        status: apiBasketball.status,
+        detail: apiBasketball.detail,
+        latest: apiBasketball.latest,
+      },
+      volleyball: {
+        ok: apiVolleyball.status === "ok",
+        optional: true,
+        status: apiVolleyball.status,
+        detail: apiVolleyball.detail,
+        latest: apiVolleyball.latest,
       },
       esportsOdds: {
-        ok: oddsPapiConfigured,
+        ok: esportsOdds.status === "ok",
         optional: true,
-        detail: oddsPapiConfigured
-          ? "OddsPapi configurada para palpites de e-sports com casas disponiveis."
-          : "ODDSPAPI_KEY ou ODDS_PAPI_KEY ausente. Necessaria somente para palpites de e-sports.",
+        status: esportsOdds.status,
+        detail: esportsOdds.detail,
+      },
+      blobs: {
+        ok: blobs.status === "ok",
+        status: blobs.status,
+        detail: blobs.detail,
+        latency_ms: blobs.latency_ms,
       },
       dailyReport: {
         ok: true,
@@ -86,22 +226,13 @@ export default async () => {
         detail: hasUsableDailyReport
           ? "Relatorio pesado das 07h desativado; palpites sao gerados somente ao clicar nos botoes."
           : "Relatorio pesado das 07h desativado para economizar API. Use os botoes para gerar sob demanda.",
-        latest: hasUsableDailyReport ? {
-          date: latest.source?.date,
-          generatedAt: latest.source?.generatedAt,
-          gamesAnalyzed: latest.source?.gamesAnalyzed,
-          picksFound: latest.source?.picksFound,
-        } : null,
-        latestIgnored: latest && !hasUsableDailyReport ? {
-          date: latest.source?.date,
-          generatedAt: latest.source?.generatedAt,
+        latest: hasUsableDailyReport ? reportSummary(latestDaily.value) : null,
+        latestIgnored: latestDaily.value && !hasUsableDailyReport ? {
+          date: (latestDaily.value as any).source?.date,
+          generatedAt: (latestDaily.value as any).source?.generatedAt,
           reason: "Cache antigo sem picks foi ignorado pelo modo de palpites.",
         } : null,
-        latestError: latestError ? {
-          date: latestError.date,
-          generatedAt: latestError.generatedAt,
-          message: latestError.message,
-        } : null,
+        latestError,
       },
     },
   });
