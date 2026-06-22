@@ -912,6 +912,29 @@
       color: #ffe2a8;
     }
 
+    .analysis-table tr.settlement-won-row td {
+      background: linear-gradient(90deg, rgba(4, 45, 38, 0.82), rgba(49, 247, 164, 0.055));
+      border-bottom-color: rgba(49, 247, 164, 0.18);
+    }
+
+    .analysis-table tr.settlement-won-row td:first-child {
+      box-shadow: inset 3px 0 0 rgba(49, 247, 164, 0.58);
+    }
+
+    .analysis-table tr.settlement-lost-row td {
+      background: linear-gradient(90deg, rgba(58, 13, 28, 0.82), rgba(255, 99, 114, 0.055));
+      border-bottom-color: rgba(255, 99, 114, 0.18);
+    }
+
+    .analysis-table tr.settlement-lost-row td:first-child {
+      box-shadow: inset 3px 0 0 rgba(255, 99, 114, 0.58);
+    }
+
+    .analysis-table tr.settlement-review-row td,
+    .analysis-table tr.settlement-void-row td {
+      background: linear-gradient(90deg, rgba(55, 36, 10, 0.62), rgba(255, 190, 73, 0.04));
+    }
+
     .analysis-table {
       width: 100%;
       border-collapse: collapse;
@@ -2779,6 +2802,8 @@
       if (source.dateEligibleFound !== undefined) details.push("Dentro da data: " + source.dateEligibleFound);
       if (source.nextAvailableDate) details.push("Proxima data com odds: " + source.nextAvailableDate);
       if (source.fixturesFound !== undefined) details.push("Fixtures: " + source.fixturesFound);
+      if (source.mode) details.push("Modo: " + source.mode);
+      if (source.cachedFixtureHits !== undefined) details.push("Fixtures salvos: " + source.cachedFixtureHits);
       if (source.fixtureRequests !== undefined) details.push("Chamadas fixtures: " + source.fixtureRequests);
       if (source.oddsRequests !== undefined) details.push("Chamadas odds: " + source.oddsRequests);
       if (source.usedTeamSearchFallback) details.push("Busca por times: usada");
@@ -2947,8 +2972,9 @@
         const label = item.label || "Conferir";
         const status = item.status || "review";
         const source = item.ticketName ? " | " + item.ticketName : "";
+        const rowClass = "settlement-row " + settlementStatusClass(status) + "-row";
         return [
-          "<tr>",
+          "<tr class=\"" + escapeHtml(rowClass) + "\">",
           "<td><strong>" + escapeHtml(item.game || "--") + "</strong><br><span class=\"muted\">" + escapeHtml((item.sourceLabel || "Palpite") + source) + "</span></td>",
           "<td>" + escapeHtml(formatMarketName(market)) + "<br><span class=\"muted\">" + escapeHtml(formatSelectionName(selection, market)) + "</span></td>",
           "<td>" + escapeHtml(item.result || "--") + "</td>",
@@ -2970,6 +2996,7 @@
       const voided = Number(summary.void || 0);
       const checked = Number(source.picksChecked || items.length || 0);
       const tone = settlementTone(summary);
+      const offlinePending = String(source.mode || "").toLowerCase().includes("economico") && pending > 0 && won === 0 && lost === 0;
 
       totalOddEl.textContent = "--";
       possibleReturnEl.textContent = "--";
@@ -2996,6 +3023,7 @@
         renderSettlementRows(items),
         "</tbody></table></div>",
         "</article>",
+        offlinePending ? "<article class=\"analysis-card\" data-tone=\"medio\"><header><h3>Aguardando placar salvo</h3><span class=\"tag\">Cache</span></header><div class=\"content\"><p>Estou em modo econ&ocirc;mico, sem chamadas externas. Quando o placar final ainda n&atilde;o estiver salvo no relat&oacute;rio, deixo como <strong>Pendente</strong> em vez de gastar API ou cravar errado.</p></div></article>" : "",
         review ? "<article class=\"analysis-card\" data-tone=\"alto\"><header><h3>O que precisa conferir</h3><span class=\"tag\">Manual</span></header><div class=\"content\"><p>Mercados como escanteios, cart&otilde;es e chutes dependem de estat&iacute;sticas que nem sempre a API entrega no p&oacute;s-jogo. Quando isso acontecer, o app deixa em <strong>Conferir</strong> em vez de cravar errado.</p></div></article>" : ""
       ].join("");
     }
@@ -3105,7 +3133,7 @@
       const originalHtml = triggerButton.innerHTML;
       triggerButton.disabled = true;
       triggerButton.textContent = "Fechando...";
-      outputEl.innerHTML = "<div class=\"empty-state\"><div><strong>Fechando acertos do dia</strong><span>Buscando os palpites salvos e comparando com placares/resultados da API.</span></div></div>";
+      outputEl.innerHTML = "<div class=\"empty-state\"><div><strong>Fechando acertos do dia</strong><span>Usando os palpites e placares que ja estao salvos, sem gastar API.</span></div></div>";
 
       try {
         const params = new URLSearchParams({
@@ -3126,7 +3154,7 @@
           setup: [
             "Confirme que a Function /api/settled-picks foi publicada.",
             "Gere primeiro algum palpite de futebol no dia.",
-            "Confira se a API_FOOTBALL_KEY ainda tem quota."
+            "Se o placar ainda nao estiver salvo, gere um novo palpite ou atualize manualmente depois."
           ]
         });
       } finally {
