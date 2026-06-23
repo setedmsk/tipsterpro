@@ -2452,7 +2452,7 @@
       if (text.includes("futebol") || text.includes("football") || text.includes("soccer") || text.includes("api football")) {
         return { icon: "⚽", label: "Futebol", className: "football" };
       }
-      if (text.includes("e sports") || text.includes("esports") || text.includes("oddspapi") || text.includes("odds papi") || text.includes("counter strike") || text.includes("valorant") || text.includes("dota") || text.includes("league of legends")) {
+      if (text.includes("e sports") || text.includes("esports") || text.includes("odds api io") || text.includes("counter strike") || text.includes("valorant") || text.includes("dota") || text.includes("league of legends")) {
         return { icon: "🎮", label: "E-sports", className: "esports" };
       }
       return { icon: "⚽", label: "Futebol", className: "football" };
@@ -3958,8 +3958,8 @@
           error: "Nao consegui carregar os palpites de E-sports.",
           setup: [
             "Confirme que a Function /api/daily-esports-picks foi publicada.",
-            "Configure ODDSPAPI_KEY ou ODDS_PAPI_KEY no Netlify.",
-            "Confirme que sua conta OddsPapi libera odds de e-sports."
+            "Configure ODDS_API_IO_KEY no Netlify.",
+            "Confirme que sua conta Odds-API.io libera odds de e-sports."
           ]
         });
       } finally {
@@ -3972,7 +3972,7 @@
       const originalHtml = triggerButton.innerHTML;
       triggerButton.disabled = true;
       triggerButton.textContent = "Buscando tenis...";
-      outputEl.innerHTML = "<div class=\"empty-state\"><div><strong>Buscando palpites de t&ecirc;nis</strong><span>Consultando OddsPapi e filtrando vencedor, total de games e 1&ordm; set.</span></div></div>";
+      outputEl.innerHTML = "<div class=\"empty-state\"><div><strong>Buscando palpites de t&ecirc;nis</strong><span>Consultando Odds-API.io e filtrando vencedor, total de games e 1&ordm; set.</span></div></div>";
 
       try {
         const params = new URLSearchParams({
@@ -3994,8 +3994,8 @@
           error: "Nao consegui carregar os palpites de Tenis.",
           setup: [
             "Confirme que a Function /api/daily-tennis-picks foi publicada.",
-            "Configure ODDSPAPI_KEY ou ODDS_PAPI_KEY no Netlify.",
-            "Confirme que sua conta OddsPapi libera odds de tenis."
+            "Configure ODDS_API_IO_KEY no Netlify.",
+            "Confirme que sua conta Odds-API.io libera odds de tenis."
           ]
         });
       } finally {
@@ -4031,7 +4031,7 @@
           setup: [
             "Confirme que a Function /api/daily-mixed-picks foi publicada.",
             "Teste os botoes individuais de futebol, basquete, volei e tenis.",
-            "Se a OddsPapi estiver sem cota, o mix deve continuar sem tenis/e-sports."
+            "Se a Odds-API.io estiver sem chave ou sem cota, o mix continua com as fontes disponiveis."
           ]
         });
       } finally {

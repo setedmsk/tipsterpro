@@ -64,7 +64,7 @@ function sportFromProvider(provider: string) {
   if (normalized.includes("basket")) return "Basquete";
   if (normalized.includes("volley") || normalized.includes("volei")) return "Volei";
   if (normalized.includes("tennis") || normalized.includes("tenis") || normalized.includes("atp") || normalized.includes("wta")) return "Tenis";
-  if (normalized.includes("oddsapi") || normalized.includes("oddspapi") || normalized.includes("sport")) return "E-sports";
+  if (normalized.includes("e sports") || normalized.includes("esports") || normalized.includes("odds api io")) return "E-sports";
   return "Futebol";
 }
 
@@ -342,7 +342,7 @@ export default async (req: Request) => {
       detail: warnings.length ? warnings.join(" | ") : "As fontes responderam sem picks aproveitaveis.",
       setup: [
         "Tente futebol, basquete ou volei individual para ver qual fonte tem dados hoje.",
-        "Se e-sports falhar com 429, a OddsPapi estourou limite de requests.",
+        "Se tenis/e-sports falhar com 429, a Odds-API.io atingiu o limite de requests.",
       ],
     }, { status: 502 });
   }

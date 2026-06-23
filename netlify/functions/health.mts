@@ -102,12 +102,13 @@ function overallFromRequired(apiFootball: ServiceHealth, openAi: ServiceHealth) 
 export default async () => {
   const checkedAt = new Date().toISOString();
 
-  const [latestDaily, latestDailyError, latestBasketball, latestVolleyball, latestTennis] = await Promise.all([
+  const [latestDaily, latestDailyError, latestBasketball, latestVolleyball, latestTennis, latestEsports] = await Promise.all([
     timed(() => readBlobJson("daily-picks", "latest.json")),
     timed(() => readBlobJson("daily-picks", "latest-error.json")),
     timed(() => readBlobJson("daily-basketball-picks", "latest.json")),
     timed(() => readBlobJson("daily-volleyball-picks", "latest.json")),
     timed(() => readBlobJson("daily-tennis-picks", "latest.json")),
+    timed(() => readBlobJson("daily-esports-picks", "latest.json")),
   ]);
 
   const apiFootball = serviceFromKeys(
@@ -137,16 +138,16 @@ export default async () => {
   );
 
   const esportsOdds = serviceFromKeys(
-    ["ODDSPAPI_KEY", "ODDS_PAPI_KEY", "ESPORTS_ODDS_API_KEY"],
-    "Provider de odds para e-sports configurado.",
-    "Provider de odds para e-sports ausente. Necessario somente para palpites de e-sports.",
+    ["ESPORTS_ODDS_API_KEY", "ODDS_API_IO_KEY", "SPORTS_ODDS_API_KEY"],
+    "Odds-API.io configurada para e-sports.",
+    "ODDS_API_IO_KEY ausente. Necessario somente para palpites de e-sports.",
     true
   );
 
   const tennisOdds = serviceFromKeys(
-    ["TENNIS_ODDS_API_KEY", "ODDSPAPI_KEY", "ODDS_PAPI_KEY"],
-    "Provider de odds para tenis configurado.",
-    "Provider de odds para tenis ausente. Necessario somente para palpites de tenis.",
+    ["TENNIS_ODDS_API_KEY", "ODDS_API_IO_KEY", "SPORTS_ODDS_API_KEY"],
+    "Odds-API.io configurada para tenis.",
+    "ODDS_API_IO_KEY ausente. Necessario somente para palpites de tenis.",
     true
   );
 
@@ -164,6 +165,7 @@ export default async () => {
   apiBasketball.latest = reportSummary(latestBasketball.value);
   apiVolleyball.latest = reportSummary(latestVolleyball.value);
   tennisOdds.latest = reportSummary(latestTennis.value);
+  esportsOdds.latest = reportSummary(latestEsports.value);
 
   const latestPicks = Number((latestDaily.value as any)?.source?.picksFound || 0);
   const hasUsableDailyReport = latestPicks > 0;
@@ -229,6 +231,7 @@ export default async () => {
         optional: true,
         status: esportsOdds.status,
         detail: esportsOdds.detail,
+        latest: esportsOdds.latest,
       },
       blobs: {
         ok: blobs.status === "ok",

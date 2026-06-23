@@ -9,7 +9,7 @@ A ideia do projeto e bem direta: voce informa os jogos ou envia um print da bet,
 - Le prints da tela da bet e tenta organizar jogo, mercado e odd.
 - Analisa jogos digitados manualmente.
 - Busca palpites de futebol apenas quando voce clica, para economizar API.
-- Tambem tem atalhos para basquete, volei, e-sports e o Bingo do 7 multi-esporte.
+- Tambem tem atalhos para basquete, volei, tenis, e-sports e o Bingo do 7 multi-esporte.
 - Evita mercados ruins ou dificeis, como handicap quebrado, linhas 0.25/0.75 e nomes crus tipo `Away`.
 - Usa cache por data, botao e mercados marcados para nao repetir busca desnecessaria.
 
@@ -28,6 +28,7 @@ netlify/functions/                 Backend do app
   settled-picks.mts                Relatorio de acertos do dia
   daily-basketball-picks.mts       Palpites de basquete
   daily-volleyball-picks.mts       Palpites de volei
+  daily-tennis-picks.mts           Palpites de tenis
   daily-esports-picks.mts          Palpites de e-sports
   daily-mixed-picks.mts            Mix multi-esporte
   health.mts                       Status do backend
@@ -49,7 +50,10 @@ Opcionais:
 - `API_BASKETBALL_KEY`
 - `API_VOLLEYBALL_KEY`
 - `API_SPORTS_KEY`
-- `ODDSPAPI_KEY` ou `ODDS_PAPI_KEY`
+- `ODDS_API_IO_KEY`
+- `TENNIS_ODDS_API_KEY`
+- `ESPORTS_ODDS_API_KEY`
+- `SPORTS_ODDS_API_KEY`
 - `OPENAI_MODEL`
 - `OPENAI_VISION_MODEL`
 - `DAILY_PICKS_AI=1`
@@ -94,6 +98,7 @@ npx netlify deploy --prod
 - `GET /api/settled-picks`
 - `GET|POST /api/daily-basketball-picks`
 - `GET|POST /api/daily-volleyball-picks`
+- `GET|POST /api/daily-tennis-picks`
 - `GET|POST /api/daily-esports-picks`
 - `GET|POST /api/daily-mixed-picks`
 
