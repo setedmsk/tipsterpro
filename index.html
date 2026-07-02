@@ -2768,32 +2768,34 @@
       return selection && (selection.bookmaker || selection.book || selection.sportsbook || selection.sourceBookmaker || "");
     }
 
+    function sportKeyFromText(value) {
+      const text = normalizeTextForDisplay(value);
+      if (["e sports", "esports", "gaming", "counter strike", "cs2", "csgo", "valorant", "dota", "league of legends"].some((term) => text.includes(term))) {
+        return "esports";
+      }
+      if (["basket", "basquet", "nba", "wnba"].some((term) => text.includes(term))) {
+        return "basketball";
+      }
+      if (["volley", "volei", "voleibol"].some((term) => text.includes(term))) {
+        return "volleyball";
+      }
+      if (["tennis", "tenis", "atp", "wta"].some((term) => text.includes(term))) {
+        return "tennis";
+      }
+      if (["foot", "futebol", "soccer", "api football"].some((term) => text.includes(term))) {
+        return "football";
+      }
+      return "";
+    }
+
     function selectionSportMeta(selection) {
-      const explicitSport = normalizeTextForDisplay([
+      const primaryText = [
         selection && selection.sport,
-        selection && selection.sourceLabel
-      ].filter(Boolean).join(" "));
-      if (explicitSport.includes("e sports") || explicitSport.includes("esports") || explicitSport.includes("counter strike") || explicitSport.includes("cs2") || explicitSport.includes("csgo") || explicitSport.includes("valorant") || explicitSport.includes("dota") || explicitSport.includes("league of legends")) {
-        return { icon: "&#127918;", label: "E-sports", className: "esports" };
-      }
-      if (explicitSport.includes("basket") || explicitSport.includes("basquet") || explicitSport.includes("nba") || explicitSport.includes("wnba")) {
-        return { icon: "&#127936;", label: "Basquete", className: "basketball" };
-      }
-      if (explicitSport.includes("volley") || explicitSport.includes("volei") || explicitSport.includes("voleibol")) {
-        return { icon: "&#127952;", label: "Volei", className: "volleyball" };
-      }
-      if (explicitSport.includes("tennis") || explicitSport.includes("tenis") || explicitSport.includes("atp") || explicitSport.includes("wta")) {
-        return { icon: "&#127934;", label: "Tenis", className: "tennis" };
-      }
-      if (explicitSport.includes("foot") || explicitSport.includes("futebol") || explicitSport.includes("soccer")) {
-        return { icon: "&#9917;", label: "Futebol", className: "football" };
-      }
-      const text = normalizeTextForDisplay([
-        selection && selection.sport,
-        selection && selection.sourceLabel,
         selection && selection.ticketName,
         selection && selection.sourceProvider,
         selection && selection.provider,
+      ].filter(Boolean).join(" ");
+      const fallbackText = [
         selection && selection.league,
         selection && selection.competition,
         selection && selection.tournament,
@@ -2801,18 +2803,22 @@
         selection && selection.category,
         selection && selection.game,
         remoteSourceProvider
-      ].filter(Boolean).join(" "));
+      ].filter(Boolean).join(" ");
+      const key = sportKeyFromText(selection && selection.sourceLabel) ||
+        sportKeyFromText(primaryText) ||
+        sportKeyFromText(fallbackText) ||
+        "football";
 
-      if (text.includes("e sports") || text.includes("esports") || text.includes("odds api io") || text.includes("counter strike") || text.includes("cs2") || text.includes("csgo") || text.includes("valorant") || text.includes("dota") || text.includes("league of legends")) {
+      if (key === "esports") {
         return { icon: "&#127918;", label: "E-sports", className: "esports" };
       }
-      if (text.includes("basket") || text.includes("basquet") || text.includes("nba") || text.includes("wnba")) {
+      if (key === "basketball") {
         return { icon: "&#127936;", label: "Basquete", className: "basketball" };
       }
-      if (text.includes("volley") || text.includes("volei") || text.includes("voleibol")) {
+      if (key === "volleyball") {
         return { icon: "&#127952;", label: "Volei", className: "volleyball" };
       }
-      if (text.includes("tennis") || text.includes("tenis") || text.includes("atp") || text.includes("wta")) {
+      if (key === "tennis") {
         return { icon: "&#127934;", label: "Tenis", className: "tennis" };
       }
       return { icon: "&#9917;", label: "Futebol", className: "football" };
@@ -2904,9 +2910,12 @@
       const market = repaired.market || repaired.category || "Mercado";
       const pick = repaired.selection || repaired.pick || repaired.value || "--";
       const odd = Number(repaired.odd);
+      const sport = selectionSportMeta(repaired);
       return {
         fixtureId: repaired.fixtureId || repaired.fixture_id || null,
-        sport: repaired.sport || "",
+        sport: sport.className,
+        sourceLabel: repaired.sourceLabel || sport.label,
+        sourceProvider: repaired.sourceProvider || repaired.provider || remoteSourceProvider || "",
         game: formatGameName(repaired),
         market,
         category: repaired.category || selectionCategory(repaired),

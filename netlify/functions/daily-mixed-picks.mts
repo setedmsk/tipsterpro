@@ -61,7 +61,7 @@ function product(items: number[]) {
 
 function sportFromProvider(provider: string) {
   const normalized = normalizeText(provider);
-  if (normalized.includes("basket")) return "Basquete";
+  if (normalized.includes("basket") || normalized.includes("basquet")) return "Basquete";
   if (normalized.includes("volley") || normalized.includes("volei")) return "Volei";
   if (normalized.includes("tennis") || normalized.includes("tenis") || normalized.includes("atp") || normalized.includes("wta")) return "Tenis";
   if (normalized.includes("e sports") || normalized.includes("esports") || normalized.includes("odds api io")) return "E-sports";
@@ -69,7 +69,12 @@ function sportFromProvider(provider: string) {
 }
 
 function pickSportKey(pick: MixedPick) {
-  return normalizeText(pick.sport || "futebol");
+  const normalized = normalizeText(pick.sport || "futebol");
+  if (normalized.includes("basket") || normalized.includes("basquet") || normalized.includes("nba") || normalized.includes("wnba")) return "basquete";
+  if (normalized.includes("volley") || normalized.includes("volei")) return "volei";
+  if (normalized.includes("tennis") || normalized.includes("tenis") || normalized.includes("atp") || normalized.includes("wta")) return "tenis";
+  if (normalized.includes("e sports") || normalized.includes("esports") || normalized.includes("gaming")) return "esports";
+  return "futebol";
 }
 
 function pickEventKey(pick: MixedPick) {

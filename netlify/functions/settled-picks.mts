@@ -61,6 +61,10 @@ type PickLike = {
   sport?: string;
   reportDate?: string;
   eventDate?: string;
+  sourceLabel?: string;
+  sourceProvider?: string;
+  provider?: string;
+  ticketName?: string;
 };
 
 function json(data: unknown, init: ResponseInit = {}) {
@@ -500,12 +504,12 @@ function selectionText(selection: PickLike) {
   return String(selection.selection || selection.pick || selection.value || "");
 }
 
-function selectionSport(selection: PickLike) {
-  const normalized = normalizeText(String(selection.sport || ""));
-  if (normalized.includes("basket")) return "basketball";
-  if (normalized.includes("volley") || normalized.includes("volei")) return "volleyball";
+function sportFromText(value: unknown) {
+  const normalized = normalizeText(String(value || ""));
   if (
     normalized.includes("esport") ||
+    normalized.includes("e sport") ||
+    normalized.includes("gaming") ||
     normalized.includes("counter") ||
     normalized.includes("cs2") ||
     normalized.includes("csgo") ||
@@ -513,8 +517,38 @@ function selectionSport(selection: PickLike) {
     normalized.includes("dota") ||
     normalized.includes("league of legends")
   ) return "esports";
+  if (normalized.includes("basket") || normalized.includes("basquet") || normalized.includes("nba") || normalized.includes("wnba")) return "basketball";
+  if (normalized.includes("volley") || normalized.includes("volei") || normalized.includes("voleibol")) return "volleyball";
+  if (normalized.includes("tennis") || normalized.includes("tenis") || normalized.includes("atp") || normalized.includes("wta")) return "tennis";
   if (normalized.includes("foot") || normalized.includes("futebol") || normalized.includes("soccer")) return "football";
-  return "football";
+  return "";
+}
+
+function selectionSport(selection: PickLike) {
+  return sportFromText(selection.sourceLabel) || sportFromText([
+    selection.sport,
+    selection.sourceProvider,
+    selection.provider,
+    selection.league,
+    selection.game,
+  ].filter(Boolean).join(" ")) || "football";
+}
+
+function sportSourceLabel(sport: string) {
+  if (sport === "basketball") return "Basquete";
+  if (sport === "volleyball") return "Volei";
+  if (sport === "tennis") return "Tenis";
+  if (sport === "esports") return "E-sports";
+  return "Futebol";
+}
+
+function withCanonicalSport<T extends PickLike>(selection: T) {
+  const sport = selectionSport(selection);
+  return {
+    ...selection,
+    sport,
+    sourceLabel: selection.sourceLabel || sportSourceLabel(sport),
+  };
 }
 
 function pickSignature(selection: PickLike) {
@@ -581,10 +615,10 @@ function collectReportSelections(report: any) {
         ...(raw || {}),
         ...selection,
         fixtureId: selectionFixtureId(selection) || selectionFixtureId(raw || {}),
-        sport: selection.sport || raw?.sport || sport || "football",
+        sport: sport || selection.sport || raw?.sport || "football",
         reportDate: String(report?.source?.date || ""),
         ticketName: item.name,
-        sourceLabel: report?.source?.scopeLabel || (sport === "basketball" ? "Basquete" : sport === "volleyball" ? "Volei" : sport === "esports" ? "E-sports" : "Palpites do dia"),
+        sourceLabel: report?.source?.scopeLabel || sportSourceLabel(sport),
       });
     }
   }
@@ -593,10 +627,10 @@ function collectReportSelections(report: any) {
     for (const pick of rawPicks) {
       selections.push({
         ...pick,
-        sport: pick.sport || sport || "football",
+        sport: sport || pick.sport || "football",
         reportDate: String(report?.source?.date || ""),
         ticketName: "Palpite",
-        sourceLabel: report?.source?.scopeLabel || (sport === "basketball" ? "Basquete" : sport === "volleyball" ? "Volei" : sport === "esports" ? "E-sports" : "Palpites do dia"),
+        sourceLabel: report?.source?.scopeLabel || sportSourceLabel(sport),
       });
     }
   }
@@ -1144,14 +1178,15 @@ async function handleWeeklySettlement(
   const cachedReusable = Array.isArray(cached?.items)
     ? cached.items.flatMap((item: any) => {
         if (!currentStartedKeys.has(weeklySelectionSignature(item))) return [];
+        const normalizedItem = withCanonicalSport(item);
         const status = String(item?.status || "");
-        if (["won", "lost", "void", "review"].includes(status)) return [item];
+        if (["won", "lost", "void", "review"].includes(status)) return [normalizedItem];
         const historicalFailure = status === "pending" &&
           String(item?.eventDate || "") < dateTo &&
           normalizeText(String(item?.reason || "")).includes("nao consegui atualizar");
         if (!historicalFailure) return [];
         return [{
-          ...item,
+          ...normalizedItem,
           status: "review",
           label: statusLabel("review"),
           tone: statusTone("review"),
@@ -1257,7 +1292,7 @@ async function handleWeeklySettlement(
   const summary = summarizeStatuses(items);
   const upcoming = upcomingSelections
     .map((selection) => ({
-      ...selection,
+      ...withCanonicalSport(selection),
       eventDate: eventDateForSelection(selection),
       status: "scheduled",
       label: "Agendado",

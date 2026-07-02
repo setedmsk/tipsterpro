@@ -50,6 +50,7 @@ type BasketballCategory =
 
 type BasketballPick = {
   fixtureId: number;
+  sport: "basketball";
   game: string;
   league: string;
   startsAt: string;
@@ -382,6 +383,7 @@ function bestPicksForGame(game: BasketballGame, oddsResponse: any[]) {
     const selection = displaySelection(value.selection, game, value.market);
     const pick: BasketballPick = {
       fixtureId: game.id,
+      sport: "basketball",
       game: gameName(game),
       league: game.league?.name || "Liga nao informada",
       startsAt: game.date,
