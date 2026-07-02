@@ -1352,6 +1352,52 @@
         padding: 8px 6px;
       }
 
+      .settlement-table {
+        border: 0;
+        overflow: visible;
+      }
+
+      .settlement-table thead {
+        display: none;
+      }
+
+      .settlement-table tbody {
+        display: grid;
+        gap: 9px;
+      }
+
+      .settlement-table tr.settlement-row {
+        display: grid;
+        overflow: hidden;
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+      }
+
+      .settlement-table tr.settlement-row td {
+        display: grid;
+        grid-template-columns: 76px minmax(0, 1fr);
+        gap: 8px;
+        width: 100%;
+        padding: 9px 10px;
+        border-bottom: 1px solid var(--border);
+        text-align: left;
+        white-space: normal;
+      }
+
+      .settlement-table tr.settlement-row td::before {
+        content: attr(data-label);
+        color: #c9b6ee;
+        font-size: 9px;
+        font-weight: 900;
+        text-transform: uppercase;
+      }
+
+      .settlement-table tr.settlement-row td:last-child {
+        border-bottom: 0;
+        text-align: left;
+        white-space: normal;
+      }
+
       .sport-game {
         grid-template-columns: 18px minmax(0, 1fr);
         gap: 5px;
@@ -1654,15 +1700,15 @@
                 </button>
               </div>
               <div class="settlement-actions">
-                <p class="settlement-heading">Fechamento dos palpites</p>
-                <button class="btn btn-secondary" type="button" id="settledPicksBtn" title="Relat&oacute;rio dos palpites que bateram ou n&atilde;o bateram no dia">
+                <p class="settlement-heading">Desempenho dos palpites</p>
+                <button class="btn btn-secondary" type="button" id="settledPicksBtn" title="Hist&oacute;rico dos palpites da semana, atualizado pelas APIs">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
                     <path d="M4 6h16"></path>
                     <path d="M4 12h10"></path>
                     <path d="M4 18h8"></path>
                     <path d="M16 15l2 2 4-5"></path>
                   </svg>
-                  <span class="btn-label">Acertos do dia</span>
+                  <span class="btn-label">Acertos da semana</span>
                 </button>
                 <button class="btn btn-secondary" type="button" id="historyBtn" title="Ver bilhetes salvos neste aparelho">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
@@ -3604,6 +3650,7 @@
       if (source.candidateLimit !== undefined) details.push("Candidatos: " + source.candidateLimit);
       if (source.sportsFound !== undefined) details.push("Esportes encontrados: " + source.sportsFound);
       if (source.gamesFound !== undefined) details.push("Jogos no radar: " + source.gamesFound);
+      if (source.upcomingCount !== undefined) details.push("Pr\u00f3ximos jogos salvos: " + source.upcomingCount);
       if (source.dateEligibleFound !== undefined) details.push("Dentro da data: " + source.dateEligibleFound);
       if (source.nextAvailableDate) details.push("Proxima data com odds: " + source.nextAvailableDate);
       if (source.fixturesFound !== undefined) details.push("Fixtures: " + source.fixturesFound);
@@ -3791,14 +3838,67 @@
         const rowClass = "settlement-row " + settlementStatusClass(status) + "-row";
         return [
           "<tr class=\"" + escapeHtml(rowClass) + "\">",
-          "<td>" + renderGameCell(item) + "<br><span class=\"muted\">" + escapeHtml((item.sourceLabel || "Palpite") + source) + "</span></td>",
-          "<td>" + escapeHtml(formatMarketName(market)) + "<br><span class=\"muted\">" + escapeHtml(formatSelectionName(selection, market)) + "</span></td>",
-          "<td>" + escapeHtml(formatDisplayText(item.result || "--")) + "</td>",
-          "<td>" + escapeHtml(odd) + "</td>",
-          "<td><span class=\"settlement-pill " + settlementStatusClass(status) + "\">" + escapeHtml(formatDisplayText(label)) + "</span><br><span class=\"muted\">" + escapeHtml(formatDisplayText(item.reason || "")) + "</span></td>",
+          "<td data-label=\"Jogo\">" + renderGameCell(item) + "<br><span class=\"muted\">" + escapeHtml((item.sourceLabel || "Palpite") + source) + "</span></td>",
+          "<td data-label=\"Entrada\">" + escapeHtml(formatMarketName(market)) + "<br><span class=\"muted\">" + escapeHtml(formatSelectionName(selection, market)) + "</span></td>",
+          "<td data-label=\"Resultado\">" + escapeHtml(formatDisplayText(item.result || "--")) + "</td>",
+          "<td data-label=\"Odd\">" + escapeHtml(odd) + "</td>",
+          "<td data-label=\"Status\"><span class=\"settlement-pill " + settlementStatusClass(status) + "\">" + escapeHtml(formatDisplayText(label)) + "</span><br><span class=\"muted\">" + escapeHtml(formatDisplayText(item.reason || "")) + "</span></td>",
           "</tr>"
         ].join("");
       }).join("");
+    }
+
+    function formatSettlementDate(value) {
+      if (!value) return "--";
+      const date = new Date(String(value) + "T12:00:00-03:00");
+      if (Number.isNaN(date.getTime())) return String(value);
+      return new Intl.DateTimeFormat("pt-BR", {
+        timeZone: "America/Sao_Paulo",
+        weekday: "short",
+        day: "2-digit",
+        month: "2-digit"
+      }).format(date).replace(".", "");
+    }
+
+    function renderSettlementDays(days) {
+      if (!Array.isArray(days) || !days.length) return "";
+      return days.map((day) => {
+        const summary = day.summary || {};
+        const items = Array.isArray(day.items) ? day.items : [];
+        const unavailableOnly = items.length > 0 && items.every((item) => item.status === "review");
+        return [
+          "<article class=\"analysis-card\" data-tone=\"" + settlementTone(summary) + "\">",
+          "<header><h3>" + escapeHtml(formatSettlementDate(day.date)) + "</h3><span class=\"tag\">" + escapeHtml(items.length) + " entradas</span></header>",
+          "<div class=\"content\"><p><strong>Bateram:</strong> " + escapeHtml(summary.won || 0) + " | <strong>N&atilde;o bateram:</strong> " + escapeHtml(summary.lost || 0) + " | <strong>Pendentes:</strong> " + escapeHtml(summary.pending || 0) + " | <strong>Sem dados:</strong> " + escapeHtml(summary.review || 0) + (summary.void ? " | <strong>Anuladas:</strong> " + escapeHtml(summary.void) : "") + "</p>",
+          unavailableOnly
+            ? "<p class=\"muted\">Os resultados deste dia n&atilde;o est&atilde;o liberados no hist&oacute;rico do plano atual das APIs. Essas entradas n&atilde;o contam como acerto nem erro.</p>"
+            : "<table class=\"analysis-table settlement-table\"><thead><tr><th>Jogo</th><th>Entrada</th><th>Resultado</th><th>Odd</th><th>Status</th></tr></thead><tbody>" + renderSettlementRows(items) + "</tbody></table>",
+          "</div>",
+          "</article>"
+        ].join("");
+      }).join("");
+    }
+
+    function renderUpcomingSettlements(items) {
+      if (!Array.isArray(items) || !items.length) return "";
+      const rows = items.slice(0, 12).map((item) => {
+        const market = item.market || item.category || "--";
+        const selection = item.selection || item.pick || item.value || "--";
+        return [
+          "<tr>",
+          "<td>" + renderGameCell(item) + "</td>",
+          "<td>" + escapeHtml(formatMarketName(market)) + "<br><span class=\"muted\">" + escapeHtml(formatSelectionName(selection, market)) + "</span></td>",
+          "<td><span class=\"settlement-pill settlement-pending\">Agendado</span></td>",
+          "</tr>"
+        ].join("");
+      }).join("");
+      return [
+        "<article class=\"analysis-card\" data-tone=\"medio\">",
+        "<header><h3>Pr&oacute;ximos palpites salvos</h3><span class=\"tag\">" + escapeHtml(items.length) + "</span></header>",
+        "<div class=\"content\"><p>Esses jogos ainda n&atilde;o entraram no placar da semana. Eles ser&atilde;o verificados depois do hor&aacute;rio de in&iacute;cio.</p>",
+        "<table class=\"analysis-table\"><thead><tr><th>Jogo</th><th>Entrada</th><th>Status</th></tr></thead><tbody>" + rows + "</tbody></table></div>",
+        "</article>"
+      ].join("");
     }
 
     function renderSettlementReport(data) {
@@ -3813,39 +3913,47 @@
       const voided = Number(summary.void || 0);
       const checked = Number(source.picksChecked || items.length || 0);
       const tone = settlementTone(summary);
+      const isWeekly = Number(source.rangeDays || 0) === 7;
+      const days = Array.isArray(data.days) ? data.days : [];
+      const upcoming = Array.isArray(data.upcoming) ? data.upcoming : [];
+      const decided = won + lost;
+      const hitRate = decided > 0 ? ((won / decided) * 100).toFixed(1).replace(".", ",") + "%" : "--";
       const offlinePending = String(source.mode || "").toLowerCase().includes("economico") && pending > 0 && won === 0 && lost === 0;
-      const refreshedPending = String(source.mode || "").toLowerCase().includes("atualizacao") && pending > 0;
+      const refreshedPending = (String(source.mode || "").toLowerCase().includes("atualizacao") || String(source.mode || "").toLowerCase().includes("incremental")) && pending > 0;
 
       totalOddEl.textContent = "--";
       possibleReturnEl.textContent = "--";
       possibleProfitEl.textContent = "--";
       selectionCountEl.textContent = String(checked);
-      typeHintEl.textContent = "Relatorio de acertos";
-      oddHintEl.textContent = "Fechamento do dia";
+      typeHintEl.textContent = isWeekly ? "Historico semanal" : "Relatorio de acertos";
+      oddHintEl.textContent = isWeekly ? "Ultimos 7 dias" : "Fechamento do dia";
       riskBadgeEl.textContent = won > lost ? "Bom" : lost > won ? "Atenção" : "Neutro";
       riskBadgeEl.dataset.risk = tone;
       riskPinEl.style.left = won > lost ? "18%" : lost > won ? "66%" : "42%";
 
       outputEl.innerHTML = [
         "<article class=\"analysis-card\" data-tone=\"" + tone + "\">",
-        "<header><h3>Relat&oacute;rio de acertos</h3><span class=\"tag\">Dia</span></header>",
-        "<div class=\"content\"><p><strong>Data:</strong> " + escapeHtml(source.date || analysisDateInput.value || todayInSaoPaulo()) + " | <strong>Palpites checados:</strong> " + escapeHtml(checked) + " | <strong>Relat&oacute;rios usados:</strong> " + escapeHtml(source.reportsFound || 0) + "</p>" + renderSourceDetails(source) + "</div>",
+        "<header><h3>" + (isWeekly ? "Hist&oacute;rico semanal de acertos" : "Relat&oacute;rio de acertos") + "</h3><span class=\"tag\">" + (isWeekly ? "7 dias" : "Dia") + "</span></header>",
+        "<div class=\"content\"><p>" + (isWeekly ? "<strong>Per&iacute;odo:</strong> " + escapeHtml(formatSettlementDate(source.dateFrom)) + " at&eacute; " + escapeHtml(formatSettlementDate(source.dateTo)) : "<strong>Data:</strong> " + escapeHtml(source.date || analysisDateInput.value || todayInSaoPaulo())) + " | <strong>Palpites checados:</strong> " + escapeHtml(checked) + " | <strong>Relat&oacute;rios usados:</strong> " + escapeHtml(source.reportsFound || 0) + "</p>" + renderSourceDetails(source) + "</div>",
         "</article>",
         "<article class=\"analysis-card\" data-tone=\"medio\">",
         "<header><h3>Placar do Sete</h3><span class=\"tag\">Resumo</span></header>",
-        "<div class=\"content\"><p><strong>Bateram:</strong> " + escapeHtml(won) + " | <strong>N&atilde;o bateram:</strong> " + escapeHtml(lost) + " | <strong>Pendentes:</strong> " + escapeHtml(pending) + " | <strong>Conferir:</strong> " + escapeHtml(review) + (voided ? " | <strong>Anuladas:</strong> " + escapeHtml(voided) : "") + "</p></div>",
+        "<div class=\"content\"><p><strong>Bateram:</strong> " + escapeHtml(won) + " | <strong>N&atilde;o bateram:</strong> " + escapeHtml(lost) + " | <strong>Pendentes:</strong> " + escapeHtml(pending) + " | <strong>" + (isWeekly ? "Sem dados" : "Conferir") + ":</strong> " + escapeHtml(review) + (voided ? " | <strong>Anuladas:</strong> " + escapeHtml(voided) : "") + (isWeekly ? " | <strong>Taxa confirmada:</strong> " + escapeHtml(hitRate) : "") + "</p></div>",
         "</article>",
-        "<article class=\"analysis-card\" data-tone=\"baixo\">",
-        "<header><h3>Sele&ccedil;&otilde;es fechadas</h3><span class=\"tag\">Resultado</span></header>",
-        "<div class=\"content\"><table class=\"analysis-table\"><thead><tr><th>Jogo</th><th>Entrada</th><th>Resultado</th><th>Odd</th><th>Status</th></tr></thead><tbody>",
-        renderSettlementRows(items),
-        "</tbody></table></div>",
-        "</article>",
+        isWeekly ? renderSettlementDays(days) : [
+          "<article class=\"analysis-card\" data-tone=\"baixo\">",
+          "<header><h3>Sele&ccedil;&otilde;es fechadas</h3><span class=\"tag\">Resultado</span></header>",
+          "<div class=\"content\"><table class=\"analysis-table settlement-table\"><thead><tr><th>Jogo</th><th>Entrada</th><th>Resultado</th><th>Odd</th><th>Status</th></tr></thead><tbody>",
+          renderSettlementRows(items),
+          "</tbody></table></div>",
+          "</article>"
+        ].join(""),
+        isWeekly ? renderUpcomingSettlements(upcoming) : "",
         offlinePending ? "<article class=\"analysis-card\" data-tone=\"medio\"><header><h3>Aguardando placar salvo</h3><span class=\"tag\">Cache</span></header><div class=\"content\"><p>Estou em modo econ&ocirc;mico, sem chamadas externas. Quando o placar final ainda n&atilde;o estiver salvo no relat&oacute;rio, deixo como <strong>Pendente</strong> em vez de gastar API ou cravar errado.</p></div></article>" : "",
         refreshedPending ? "<article class=\"analysis-card\" data-tone=\"medio\"><header><h3>Alguns resultados ainda est&atilde;o pendentes</h3><span class=\"tag\">API</span></header><div class=\"content\"><p>As APIs foram consultadas agora. Os itens pendentes ainda n&atilde;o vieram como finalizados ou o provedor n&atilde;o devolveu um placar atualizado.</p></div></article>" : "",
-        review ? "<article class=\"analysis-card\" data-tone=\"alto\"><header><h3>O que precisa conferir</h3><span class=\"tag\">Manual</span></header><div class=\"content\"><p>Mercados como escanteios, cart&otilde;es e chutes dependem de estat&iacute;sticas que nem sempre a API entrega no p&oacute;s-jogo. Quando isso acontecer, o app deixa em <strong>Conferir</strong> em vez de cravar errado.</p></div></article>" : ""
+        review ? (isWeekly ? "<article class=\"analysis-card\" data-tone=\"alto\"><header><h3>Resultados hist&oacute;ricos indispon&iacute;veis</h3><span class=\"tag\">Sem dados</span></header><div class=\"content\"><p>Algumas partidas antigas n&atilde;o est&atilde;o liberadas no plano atual das APIs. Elas ficam fora da contagem de acertos e erros, sem serem marcadas como perdidas.</p></div></article>" : "<article class=\"analysis-card\" data-tone=\"alto\"><header><h3>O que precisa conferir</h3><span class=\"tag\">Manual</span></header><div class=\"content\"><p>Mercados como escanteios, cart&otilde;es e chutes dependem de estat&iacute;sticas que nem sempre a API entrega no p&oacute;s-jogo. Quando isso acontecer, o app deixa em <strong>Conferir</strong> em vez de cravar errado.</p></div></article>") : ""
       ].join("");
-      appendHistorySnapshot(source.date || analysisDateInput.value || todayInSaoPaulo());
+      appendHistorySnapshot(source.dateTo || source.date || analysisDateInput.value || todayInSaoPaulo());
     }
 
     function readableBackendError(data, fallback) {
@@ -3967,11 +4075,11 @@
       const originalHtml = triggerButton.innerHTML;
       triggerButton.disabled = true;
       triggerButton.textContent = "Atualizando...";
-      outputEl.innerHTML = "<div class=\"empty-state\"><div><strong>Atualizando acertos do dia</strong><span>Consultando os placares de futebol, basquete e v&ocirc;lei em chamadas agrupadas.</span></div></div>";
+      outputEl.innerHTML = "<div class=\"empty-state\"><div><strong>Atualizando acertos da semana</strong><span>Reunindo os palpites salvos e consultando apenas jogos iniciados que ainda est&atilde;o sem resultado.</span></div></div>";
 
       try {
         const params = new URLSearchParams({
-          date: "auto",
+          range: "7",
           refresh: "1"
         });
         const response = await fetch("/api/settled-picks?" + params.toString());
@@ -3985,10 +4093,10 @@
         renderSettlementReport(data);
       } catch (error) {
         renderSetupError({
-          error: "Nao consegui carregar o relatorio de acertos.",
+          error: "Nao consegui carregar o historico semanal.",
           setup: [
             "Confirme que a Function /api/settled-picks foi publicada.",
-            "Gere primeiro algum palpite de futebol, basquete ou v\u00f4lei no dia.",
+            "Gere primeiro algum palpite de futebol, basquete ou v\u00f4lei nesta semana.",
             "Confira se as chaves esportivas ainda possuem quota para consultar os placares."
           ]
         });

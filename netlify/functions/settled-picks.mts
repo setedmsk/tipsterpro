@@ -15,6 +15,7 @@ const DEFAULT_TIMEZONE = "America/Sao_Paulo";
 const FOOTBALL_CACHE_VERSIONS = ["manual-br-v2", "manual-br-v1"];
 const VOLLEYBALL_CACHE_VERSION = "volley-points-v2";
 const SETTLEMENT_CACHE_VERSION = "multi-sport-v2";
+const WEEKLY_SETTLEMENT_CACHE_VERSION = "weekly-v1";
 
 type ApiFootballFixture = {
   fixture: {
@@ -52,6 +53,8 @@ type PickLike = {
   league?: string;
   startsAt?: string;
   sport?: string;
+  reportDate?: string;
+  eventDate?: string;
 };
 
 function json(data: unknown, init: ResponseInit = {}) {
@@ -537,6 +540,7 @@ function collectReportSelections(report: any) {
         ...selection,
         fixtureId: selectionFixtureId(selection) || selectionFixtureId(raw || {}),
         sport: selection.sport || raw?.sport || sport || "football",
+        reportDate: String(report?.source?.date || ""),
         ticketName: item.name,
         sourceLabel: report?.source?.scopeLabel || (sport === "basketball" ? "Basquete" : sport === "volleyball" ? "Volei" : "Palpites do dia"),
       });
@@ -548,6 +552,7 @@ function collectReportSelections(report: any) {
       selections.push({
         ...pick,
         sport: pick.sport || sport || "football",
+        reportDate: String(report?.source?.date || ""),
         ticketName: "Palpite",
         sourceLabel: report?.source?.scopeLabel || (sport === "basketball" ? "Basquete" : sport === "volleyball" ? "Volei" : "Palpites do dia"),
       });
@@ -565,6 +570,32 @@ function collectSelections(reports: any[]) {
       if (!key.includes("|0|") && !byKey.has(key)) byKey.set(key, selection);
     }
   }
+  return [...byKey.values()];
+}
+
+function weeklySelectionSignature(selection: PickLike) {
+  return [
+    selectionSport(selection),
+    selectionFixtureId(selection),
+    normalizeText(String(selection.market || selection.category || "")),
+    normalizeText(selectionText(selection)),
+  ].join("|");
+}
+
+function collectWeeklySelections(reports: any[]) {
+  const byKey = new Map<string, PickLike & { ticketName?: string; sourceLabel?: string }>();
+
+  for (const report of reports) {
+    for (const selection of collectReportSelections(report)) {
+      const key = weeklySelectionSignature(selection);
+      if (key.includes("|0|")) continue;
+      const current = byKey.get(key);
+      if (!current || String(selection.reportDate || "") > String(current.reportDate || "")) {
+        byKey.set(key, selection);
+      }
+    }
+  }
+
   return [...byKey.values()];
 }
 
@@ -645,9 +676,11 @@ async function loadUpdatedFixtures(
 
   const fixturesById = new Map<string, ApiFootballFixture>();
   const warnings: string[] = [];
+  const failedQueryKeys = new Set<string>();
   for (const result of queryResults) {
     if (result.error) {
       warnings.push(`${result.sport} ${result.date}: ${result.error}`);
+      failedQueryKeys.add(`${result.sport}:${result.date}`);
       continue;
     }
     for (const fixture of result.fixtures || []) {
@@ -659,6 +692,7 @@ async function loadUpdatedFixtures(
   return {
     fixturesById,
     warnings,
+    failedQueryKeys,
     requestCounts,
     fixtureRequests: Object.values(requestCounts).reduce((sum, value) => sum + value, 0),
   };
@@ -924,8 +958,259 @@ function statusTone(status: PickStatus) {
   return "extremo";
 }
 
+function eventDateForSelection(selection: PickLike) {
+  return localDateForSelection(selection, String(selection.reportDate || todayInSaoPaulo()));
+}
+
+function selectionHasStarted(selection: PickLike, now = Date.now()) {
+  const startsAt = new Date(String(selection.startsAt || "")).getTime();
+  if (Number.isFinite(startsAt)) return startsAt <= now;
+  return eventDateForSelection(selection) < todayInSaoPaulo();
+}
+
+function weeklySettlementKey(dateTo: string) {
+  return `reports/${WEEKLY_SETTLEMENT_CACHE_VERSION}/${dateTo}.json`;
+}
+
+async function readWeeklySettlement(dateTo: string) {
+  try {
+    const report = await settlementStore().get(weeklySettlementKey(dateTo), { type: "json" });
+    return isUsefulSettlement(report) ? report : null;
+  } catch {
+    return null;
+  }
+}
+
+async function saveWeeklySettlement(report: any) {
+  if (!isUsefulSettlement(report)) return;
+  try {
+    await settlementStore().setJSON(weeklySettlementKey(report.source.dateTo), report);
+  } catch {
+    // The weekly report can still be returned when Blob persistence is unavailable.
+  }
+}
+
+function summarizeStatuses(items: any[]) {
+  return items.reduce((acc: Record<string, number>, item: any) => {
+    acc[item.status] = (acc[item.status] || 0) + 1;
+    return acc;
+  }, { won: 0, lost: 0, pending: 0, void: 0, review: 0 });
+}
+
+function weeklyDaySummaries(items: any[]) {
+  const byDate = new Map<string, any[]>();
+  for (const item of items) {
+    const date = String(item.eventDate || item.reportDate || "");
+    const list = byDate.get(date) || [];
+    list.push(item);
+    byDate.set(date, list);
+  }
+
+  return [...byDate.entries()]
+    .sort(([dateA], [dateB]) => dateB.localeCompare(dateA))
+    .map(([date, dayItems]) => ({
+      date,
+      summary: summarizeStatuses(dayItems),
+      items: dayItems,
+    }));
+}
+
+async function handleWeeklySettlement(
+  allowLiveApi: boolean,
+  context: { deploy?: { published?: boolean } }
+) {
+  const dateTo = todayInSaoPaulo();
+  const dateFrom = addDays(dateTo, -6);
+  const availableDates = await listReportDates();
+  const reportDates = availableDates.filter((date) => date >= dateFrom && date <= dateTo);
+  const reports = (await Promise.all(reportDates.map(readReportsForDate))).flat();
+  const collected = collectWeeklySelections(reports)
+    .map((selection) => ({
+      ...selection,
+      eventDate: eventDateForSelection(selection),
+    }))
+    .filter((selection) => selection.eventDate >= dateFrom && selection.eventDate <= dateTo);
+
+  if (!reports.length || !collected.length) {
+    return json({
+      error: "Ainda nao existe historico de palpites nesta semana",
+      detail: "Gere palpites nos botoes esportivos para o Sete PRO acompanhar os resultados.",
+      setup: [
+        "Use Futebol, Basquete, Volei ou Bingo do 7 para salvar palpites.",
+        "Depois volte em Acertos da semana para atualizar os placares.",
+      ],
+    }, { status: 404 });
+  }
+
+  const startedSelections = collected.filter((selection) => selectionHasStarted(selection));
+  const upcomingSelections = collected.filter((selection) => !selectionHasStarted(selection));
+  const cached = await readWeeklySettlement(dateTo);
+  const currentStartedKeys = new Set(startedSelections.map(weeklySelectionSignature));
+  const cachedReusable = Array.isArray(cached?.items)
+    ? cached.items.flatMap((item: any) => {
+        if (!currentStartedKeys.has(weeklySelectionSignature(item))) return [];
+        const status = String(item?.status || "");
+        if (["won", "lost", "void", "review"].includes(status)) return [item];
+        const historicalFailure = status === "pending" &&
+          String(item?.eventDate || "") < dateTo &&
+          normalizeText(String(item?.reason || "")).includes("nao consegui atualizar");
+        if (!historicalFailure) return [];
+        return [{
+          ...item,
+          status: "review",
+          label: statusLabel("review"),
+          tone: statusTone("review"),
+          reason: "Resultado historico indisponivel no plano atual da API. Este item fica fora da contagem de acertos e erros.",
+          result: "--",
+        }];
+      })
+    : [];
+  const reusableByKey = new Map(cachedReusable.map((item: any) => [weeklySelectionSignature(item), item]));
+  const selectionsToUpdate = startedSelections.filter((selection) => !reusableByKey.has(weeklySelectionSignature(selection)));
+  const storedFixturesById = collectStoredFixtures(reports);
+  const updated = allowLiveApi && selectionsToUpdate.length
+    ? await loadUpdatedFixtures(selectionsToUpdate, storedFixturesById, dateTo)
+    : {
+        fixturesById: new Map<string, ApiFootballFixture>(),
+        warnings: [] as string[],
+        failedQueryKeys: new Set<string>(),
+        requestCounts: { football: 0, basketball: 0, volleyball: 0 },
+        fixtureRequests: 0,
+      };
+
+  const statsCache = new Map<number, any[]>();
+  const refreshedItems: any[] = [];
+  const liveKeys = new Set<string>();
+  const storedKeys = new Set<string>();
+  const fallbackKeys = new Set<string>();
+
+  for (const selection of selectionsToUpdate) {
+    const fixtureId = selectionFixtureId(selection);
+    const sport = selectionSport(selection);
+    const key = fixtureKey(sport, fixtureId);
+    const liveFixture = updated.fixturesById.get(key);
+    const storedFixture = storedFixturesById.get(key);
+    const fixture = liveFixture || storedFixture;
+    const fixtureSource = liveFixture ? "live" : storedFixture ? "stored" : "missing";
+    if (liveFixture) liveKeys.add(key);
+    if (storedFixture) storedKeys.add(key);
+    if (allowLiveApi && !liveFixture && storedFixture) fallbackKeys.add(key);
+
+    if (!fixture) {
+      refreshedItems.push({
+        ...selection,
+        fixtureId,
+        sport,
+        eventDate: eventDateForSelection(selection),
+        status: "review",
+        label: statusLabel("review"),
+        tone: statusTone("review"),
+        reason: allowLiveApi
+          ? "A API de resultados nao devolveu esse jogo na atualizacao."
+          : "Nao encontrei placar final salvo para esse jogo.",
+        result: "--",
+        category: categoryFor(selection),
+      });
+      continue;
+    }
+
+    const evaluated = await evaluateSelection(selection, fixture, statsCache, allowLiveApi);
+    const eventDate = eventDateForSelection(selection);
+    const historicalQueryFailed = evaluated.status === "pending" &&
+      fixtureSource === "stored" &&
+      eventDate < dateTo &&
+      updated.failedQueryKeys.has(`${sport}:${eventDate}`);
+    const result = historicalQueryFailed
+      ? {
+          status: "review" as PickStatus,
+          reason: "Resultado historico indisponivel no plano atual da API. Este item fica fora da contagem de acertos e erros.",
+        }
+      : evaluated.status === "pending" && allowLiveApi && fixtureSource === "stored"
+      ? {
+          status: "pending" as PickStatus,
+          reason: `Nao consegui atualizar este placar agora. Ultimo status salvo: ${fixtureStatusLong(fixture) || fixtureStatusShort(fixture) || "sem status"}.`,
+        }
+      : evaluated;
+    refreshedItems.push({
+      fixtureId,
+      sport,
+      game: selection.game || `${fixture.teams.home.name} x ${fixture.teams.away.name}`,
+      league: selection.league || fixture.league?.name || "Competicao nao informada",
+      startsAt: selection.startsAt || (fixture as any)?.fixture?.date || (fixture as any)?.date,
+      eventDate,
+      reportDate: selection.reportDate,
+      market: selection.market || selection.category || "--",
+      selection: selectionText(selection),
+      odd: Number(selection.odd || 0) || null,
+      bookmaker: selection.bookmaker || "",
+      ticketName: selection.ticketName || "Palpite",
+      sourceLabel: selection.sourceLabel || "Palpites do Sete",
+      status: result.status,
+      label: statusLabel(result.status),
+      tone: statusTone(result.status),
+      reason: result.reason,
+      result: scoreLabel(fixture),
+      category: categoryFor(selection),
+    });
+  }
+
+  const items = [...reusableByKey.values(), ...refreshedItems]
+    .sort((a: any, b: any) => (
+      String(b.eventDate || "").localeCompare(String(a.eventDate || "")) ||
+      String(b.startsAt || "").localeCompare(String(a.startsAt || ""))
+    ));
+  const summary = summarizeStatuses(items);
+  const upcoming = upcomingSelections
+    .map((selection) => ({
+      ...selection,
+      eventDate: eventDateForSelection(selection),
+      status: "scheduled",
+      label: "Agendado",
+    }))
+    .sort((a, b) => String(a.startsAt || "").localeCompare(String(b.startsAt || "")));
+
+  const responseBody = {
+    source: {
+      provider: allowLiveApi ? "Sete PRO + APIs oficiais de resultados" : "Sete PRO + historico salvo",
+      date: dateTo,
+      dateFrom,
+      dateTo,
+      rangeDays: 7,
+      generatedAt: new Date().toISOString(),
+      timezone: DEFAULT_TIMEZONE,
+      reportDates,
+      reportsFound: reports.length,
+      picksFound: collected.length,
+      picksChecked: items.length,
+      upcomingCount: upcoming.length,
+      fixtureRequests: updated.fixtureRequests,
+      fixtureRequestsBySport: updated.requestCounts,
+      liveFixtureHits: liveKeys.size,
+      cachedFixtureHits: storedKeys.size,
+      fallbackFixtureHits: fallbackKeys.size,
+      statisticsRequests: statsCache.size,
+      warnings: updated.warnings,
+      mode: allowLiveApi ? "Historico semanal com atualizacao incremental" : "Historico semanal salvo",
+    },
+    summary,
+    days: weeklyDaySummaries(items),
+    items,
+    upcoming,
+  };
+
+  await saveWeeklySettlement(responseBody);
+  if (context?.deploy?.published === true) {
+    await notifySettlementIfNeeded(responseBody);
+  }
+  return json(responseBody);
+}
+
 export default async (req: Request, context: { deploy?: { published?: boolean } }) => {
   const url = new URL(req.url);
+  if (url.searchParams.get("range") === "7" || url.searchParams.get("weekly") === "1") {
+    const allowLiveApi = url.searchParams.get("refresh") === "1" || url.searchParams.get("live") === "1";
+    return handleWeeklySettlement(allowLiveApi, context);
+  }
   const date = await resolveReportDate(url.searchParams.get("date"));
   const allowLiveApi = url.searchParams.get("refresh") === "1" || url.searchParams.get("live") === "1";
 
@@ -980,6 +1265,7 @@ export default async (req: Request, context: { deploy?: { published?: boolean } 
       : {
           fixturesById: new Map<string, ApiFootballFixture>(),
           warnings: [] as string[],
+          failedQueryKeys: new Set<string>(),
           requestCounts: { football: 0, basketball: 0, volleyball: 0 },
           fixtureRequests: 0,
         };
