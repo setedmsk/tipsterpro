@@ -1126,18 +1126,6 @@ async function handleWeeklySettlement(
   const startedSelections = collected.filter((selection) => selectionHasStarted(selection));
   const upcomingSelections = collected.filter((selection) => !selectionHasStarted(selection));
   const cached = await readWeeklySettlement(dateTo);
-  if (!allowLiveApi && cached) {
-    return json({
-      ...cached,
-      source: {
-        ...cached.source,
-        cached: true,
-        fixtureRequests: 0,
-        fixtureRequestsBySport: { football: 0, basketball: 0, volleyball: 0, esports: 0 },
-        mode: "Historico semanal salvo",
-      },
-    });
-  }
   const currentStartedKeys = new Set(startedSelections.map(weeklySelectionSignature));
   const cachedReusable = Array.isArray(cached?.items)
     ? cached.items.flatMap((item: any) => {
