@@ -6,6 +6,7 @@ import {
   oddsApiIoFetch,
   oddsApiIoKey,
 } from "./_shared/odds-api-io.mts";
+import { listLiveFixtureSnapshots } from "./_shared/ticket-watch.mts";
 
 declare const Netlify: {
   env: {
@@ -658,6 +659,16 @@ function collectStoredFixtures(reports: any[]) {
   return byId;
 }
 
+async function mergeLiveFixtureSnapshots(byId: Map<string, ApiFootballFixture>) {
+  const snapshots = await listLiveFixtureSnapshots().catch(() => []);
+  for (const snapshot of snapshots) {
+    const fixture = snapshot?.fixture;
+    const fixtureId = fixtureIdFromFixture(fixture);
+    if (fixtureId) byId.set(fixtureKey("football", fixtureId), fixture);
+  }
+  return byId;
+}
+
 function fixtureKey(sport: string, fixtureId: number) {
   return `${sport || "football"}:${fixtureId}`;
 }
@@ -1004,7 +1015,10 @@ async function evaluateSelection(selection: PickLike, fixture: ApiFootballFixtur
     if (!allowLiveApi) {
       return { status: "review" as PickStatus, reason: "Esse mercado precisa de estatistica pos-jogo; para economizar API, nao atualizei ao vivo." };
     }
-    if (!statsCache.has(fixtureId)) statsCache.set(fixtureId, await fixtureStatistics(fixtureId));
+    const capturedStats = Array.isArray((fixture as any)?.__stats) ? (fixture as any).__stats : [];
+    if (!statsCache.has(fixtureId)) {
+      statsCache.set(fixtureId, capturedStats.length ? capturedStats : await fixtureStatistics(fixtureId));
+    }
     const stats = statsCache.get(fixtureId) || [];
     const patterns = category === "escanteios"
       ? ["corner"]
@@ -1148,7 +1162,7 @@ async function handleWeeklySettlement(
     : [];
   const reusableByKey = new Map(cachedReusable.map((item: any) => [weeklySelectionSignature(item), item]));
   const selectionsToUpdate = startedSelections.filter((selection) => !reusableByKey.has(weeklySelectionSignature(selection)));
-  const storedFixturesById = collectStoredFixtures(reports);
+  const storedFixturesById = await mergeLiveFixtureSnapshots(collectStoredFixtures(reports));
   const updated = allowLiveApi && selectionsToUpdate.length
     ? await loadUpdatedFixtures(selectionsToUpdate, storedFixturesById, dateTo)
     : {
@@ -1324,7 +1338,7 @@ export default async (req: Request, context: { deploy?: { published?: boolean } 
 
     const reports = await readReportsForDate(date);
     const selections = collectSelections(reports);
-    const storedFixturesById = collectStoredFixtures(reports);
+    const storedFixturesById = await mergeLiveFixtureSnapshots(collectStoredFixtures(reports));
 
     if (!reports.length || !selections.length) {
       return json({

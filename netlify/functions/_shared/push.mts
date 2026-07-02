@@ -105,6 +105,16 @@ export async function listPushSubscriptions() {
   return records;
 }
 
+export async function getPushSubscriptionById(id: string) {
+  if (!id) return null;
+  try {
+    const record = await pushStore().get(`subscriptions/${id}.json`, { type: "json" }) as any;
+    return record?.subscription && isValidSubscription(record.subscription) ? record.subscription : null;
+  } catch {
+    return null;
+  }
+}
+
 export async function sendPushToAll(payload: PushPayload) {
   const config = configureWebPush();
   if (!config.configured) {

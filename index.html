@@ -849,6 +849,119 @@
       color: #d8f7ff;
     }
 
+    .btn-watch {
+      border-color: rgba(255, 190, 73, 0.34);
+      background: rgba(255, 190, 73, 0.1);
+      color: #ffe2a8;
+    }
+
+    .btn-watch[data-active="true"] {
+      border-color: rgba(49, 247, 164, 0.4);
+      background: rgba(49, 247, 164, 0.12);
+      color: #c9ffe4;
+    }
+
+    .watch-dialog {
+      width: min(520px, calc(100vw - 28px));
+      padding: 0;
+      border: 1px solid rgba(168, 85, 247, 0.38);
+      border-radius: 10px;
+      background: #090812;
+      color: var(--ink);
+      box-shadow: 0 22px 70px rgba(0, 0, 0, 0.72);
+    }
+
+    .watch-dialog::backdrop {
+      background: rgba(0, 0, 0, 0.78);
+      backdrop-filter: blur(3px);
+    }
+
+    .watch-dialog header,
+    .watch-dialog .watch-dialog-body {
+      padding: 16px;
+    }
+
+    .watch-dialog header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      border-bottom: 1px solid var(--border);
+      background: rgba(168, 85, 247, 0.1);
+    }
+
+    .watch-dialog h3,
+    .watch-dialog p {
+      margin: 0;
+    }
+
+    .icon-btn {
+      width: 34px;
+      height: 34px;
+      flex: 0 0 34px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.04);
+      color: var(--ink);
+      font-size: 22px;
+      line-height: 1;
+      cursor: pointer;
+    }
+
+    .watch-dialog-body {
+      display: grid;
+      gap: 14px;
+    }
+
+    .watch-selection-list {
+      display: grid;
+      gap: 7px;
+      max-height: 220px;
+      overflow: auto;
+    }
+
+    .watch-selection {
+      padding: 9px 10px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.025);
+      font-size: 11px;
+    }
+
+    .watch-options {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 7px;
+    }
+
+    .watch-option {
+      display: flex;
+      min-width: 0;
+      align-items: center;
+      gap: 7px;
+      padding: 9px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      font-size: 11px;
+      font-weight: 800;
+    }
+
+    .watch-option input {
+      flex: 0 0 auto;
+    }
+
+    .watch-dialog-actions {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+
+    .watch-dialog-status {
+      min-height: 18px;
+      color: var(--muted);
+      font-size: 11px;
+    }
+
     .history-summary {
       display: grid;
       grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1487,11 +1600,11 @@
       }
 
       .ticket-actions {
-        grid-template-columns: repeat(3, minmax(0, 1fr));
+        grid-template-columns: repeat(4, minmax(0, 1fr));
       }
 
       .history-actions {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
+        grid-template-columns: repeat(3, minmax(0, 1fr));
       }
 
       .segmented {
@@ -1846,6 +1959,29 @@
     </p>
   </main>
 
+  <dialog class="watch-dialog" id="ticketWatchDialog">
+    <header>
+      <div>
+        <h3>Acompanhar bilhete</h3>
+        <p class="muted">Alertas somente para os jogos deste bilhete.</p>
+      </div>
+      <button class="icon-btn" type="button" id="ticketWatchClose" title="Fechar" aria-label="Fechar">&times;</button>
+    </header>
+    <form class="watch-dialog-body" id="ticketWatchForm" method="dialog">
+      <div class="watch-selection-list" id="ticketWatchSelections"></div>
+      <div class="watch-options">
+        <label class="watch-option"><input type="checkbox" name="watchKickoff" checked> In&iacute;cio</label>
+        <label class="watch-option"><input type="checkbox" name="watchGoals" checked> Gols</label>
+        <label class="watch-option"><input type="checkbox" name="watchFinal" checked> Resultado</label>
+      </div>
+      <p class="watch-dialog-status" id="ticketWatchStatus">As sele&ccedil;&otilde;es do bilhete ser&atilde;o acompanhadas automaticamente.</p>
+      <div class="watch-dialog-actions">
+        <button class="btn btn-secondary" type="button" id="ticketWatchCancel">Cancelar</button>
+        <button class="btn btn-primary" type="submit" id="ticketWatchConfirm">Ativar sino</button>
+      </div>
+    </form>
+  </dialog>
+
   <script>
     const apiAdapters = {
       odds: {
@@ -1945,6 +2081,13 @@
     const historyBtn = document.getElementById("historyBtn");
     const pushAlertsBtn = document.getElementById("pushAlertsBtn");
     const pushStatusEl = document.getElementById("pushStatus");
+    const ticketWatchDialog = document.getElementById("ticketWatchDialog");
+    const ticketWatchForm = document.getElementById("ticketWatchForm");
+    const ticketWatchSelections = document.getElementById("ticketWatchSelections");
+    const ticketWatchStatus = document.getElementById("ticketWatchStatus");
+    const ticketWatchConfirm = document.getElementById("ticketWatchConfirm");
+    const ticketWatchClose = document.getElementById("ticketWatchClose");
+    const ticketWatchCancel = document.getElementById("ticketWatchCancel");
     const combatCourtBtn = document.getElementById("combatCourtBtn");
     const tennisBtn = document.getElementById("tennisBtn");
     const esportsBtn = document.getElementById("esportsBtn");
@@ -1969,6 +2112,8 @@
     const ticketActionStore = new Map();
     const HISTORY_KEY = "seteProTicketHistoryV1";
     const HISTORY_LIMIT = 80;
+    const TICKET_WATCH_KEY = "seteProTicketWatchesV1";
+    let pendingTicketWatchAction = null;
 
     const sampleTicket = {
       games: [
@@ -2624,8 +2769,29 @@
     }
 
     function selectionSportMeta(selection) {
+      const explicitSport = normalizeTextForDisplay([
+        selection && selection.sport,
+        selection && selection.sourceLabel
+      ].filter(Boolean).join(" "));
+      if (explicitSport.includes("e sports") || explicitSport.includes("esports") || explicitSport.includes("counter strike") || explicitSport.includes("cs2") || explicitSport.includes("csgo") || explicitSport.includes("valorant") || explicitSport.includes("dota") || explicitSport.includes("league of legends")) {
+        return { icon: "&#127918;", label: "E-sports", className: "esports" };
+      }
+      if (explicitSport.includes("basket") || explicitSport.includes("basquet") || explicitSport.includes("nba") || explicitSport.includes("wnba")) {
+        return { icon: "&#127936;", label: "Basquete", className: "basketball" };
+      }
+      if (explicitSport.includes("volley") || explicitSport.includes("volei") || explicitSport.includes("voleibol")) {
+        return { icon: "&#127952;", label: "Volei", className: "volleyball" };
+      }
+      if (explicitSport.includes("tennis") || explicitSport.includes("tenis") || explicitSport.includes("atp") || explicitSport.includes("wta")) {
+        return { icon: "&#127934;", label: "Tenis", className: "tennis" };
+      }
+      if (explicitSport.includes("foot") || explicitSport.includes("futebol") || explicitSport.includes("soccer")) {
+        return { icon: "&#9917;", label: "Futebol", className: "football" };
+      }
       const text = normalizeTextForDisplay([
         selection && selection.sport,
+        selection && selection.sourceLabel,
+        selection && selection.ticketName,
         selection && selection.sourceProvider,
         selection && selection.provider,
         selection && selection.league,
@@ -2637,22 +2803,19 @@
         remoteSourceProvider
       ].filter(Boolean).join(" "));
 
-      if (text.includes("basket") || text.includes("nba") || text.includes("wnba")) {
-        return { icon: "🏀", label: "Basquete", className: "basketball" };
+      if (text.includes("e sports") || text.includes("esports") || text.includes("odds api io") || text.includes("counter strike") || text.includes("cs2") || text.includes("csgo") || text.includes("valorant") || text.includes("dota") || text.includes("league of legends")) {
+        return { icon: "&#127918;", label: "E-sports", className: "esports" };
+      }
+      if (text.includes("basket") || text.includes("basquet") || text.includes("nba") || text.includes("wnba")) {
+        return { icon: "&#127936;", label: "Basquete", className: "basketball" };
       }
       if (text.includes("volley") || text.includes("volei") || text.includes("voleibol")) {
-        return { icon: "🏐", label: "Volei", className: "volleyball" };
+        return { icon: "&#127952;", label: "Volei", className: "volleyball" };
       }
       if (text.includes("tennis") || text.includes("tenis") || text.includes("atp") || text.includes("wta")) {
         return { icon: "&#127934;", label: "Tenis", className: "tennis" };
       }
-      if (text.includes("futebol") || text.includes("football") || text.includes("soccer") || text.includes("api football")) {
-        return { icon: "⚽", label: "Futebol", className: "football" };
-      }
-      if (text.includes("e sports") || text.includes("esports") || text.includes("odds api io") || text.includes("counter strike") || text.includes("cs2") || text.includes("csgo") || text.includes("valorant") || text.includes("dota") || text.includes("league of legends")) {
-        return { icon: "🎮", label: "E-sports", className: "esports" };
-      }
-      return { icon: "⚽", label: "Futebol", className: "football" };
+      return { icon: "&#9917;", label: "Futebol", className: "football" };
     }
 
     function renderGameCell(selection) {
@@ -2986,6 +3149,8 @@
       }).join("");
       const text = ticketCopyTextFromHistory(ticket);
       const actionId = registerTicketAction({ text, ticket });
+      const watchRecord = activeTicketWatch(ticket.signature);
+      const canWatch = monitorableFootballSelections(ticket).length > 0;
       return [
         "<div class=\"history-ticket\">",
         "<header><h4>" + escapeHtml(ticket.title || "Bilhete") + "</h4><span class=\"history-status history-status-" + escapeHtml(status) + "\">" + escapeHtml(historyStatusLabel(status)) + "</span></header>",
@@ -2993,7 +3158,7 @@
         "<table class=\"analysis-table\"><thead><tr><th>Jogo</th><th>Entrada</th><th>Odd</th><th>Status</th></tr></thead><tbody>",
         rows || "<tr><td colspan=\"4\">Sem selecoes salvas.</td></tr>",
         "</tbody></table>",
-        "<div class=\"history-actions\"><button class=\"btn btn-copy\" type=\"button\" data-copy-ticket-id=\"" + escapeHtml(actionId) + "\">Copiar bilhete</button><button class=\"btn btn-share\" type=\"button\" data-share-ticket-id=\"" + escapeHtml(actionId) + "\">Compartilhar</button></div>",
+        "<div class=\"history-actions\"><button class=\"btn btn-copy\" type=\"button\" data-copy-ticket-id=\"" + escapeHtml(actionId) + "\">Copiar bilhete</button><button class=\"btn btn-share\" type=\"button\" data-share-ticket-id=\"" + escapeHtml(actionId) + "\">Compartilhar</button><button class=\"btn btn-watch\" type=\"button\" data-watch-ticket-id=\"" + escapeHtml(actionId) + "\" data-active=\"" + (watchRecord ? "true" : "false") + "\"" + (canWatch ? "" : " disabled") + ">" + (watchRecord ? "Sino ativo" : "Acompanhar") + "</button></div>",
         "</div>"
       ].join("");
     }
@@ -3180,6 +3345,33 @@
       return id;
     }
 
+    function readTicketWatches() {
+      try {
+        const parsed = JSON.parse(localStorage.getItem(TICKET_WATCH_KEY) || "{}");
+        return parsed && typeof parsed === "object" ? parsed : {};
+      } catch {
+        return {};
+      }
+    }
+
+    function writeTicketWatches(watches) {
+      localStorage.setItem(TICKET_WATCH_KEY, JSON.stringify(watches || {}));
+    }
+
+    function activeTicketWatch(signature) {
+      const record = readTicketWatches()[signature];
+      if (!record || !record.active) return null;
+      const expiresAt = new Date(record.expiresAt || 0).getTime();
+      return Number.isFinite(expiresAt) && expiresAt > Date.now() ? record : null;
+    }
+
+    function monitorableFootballSelections(ticket) {
+      return (ticket && Array.isArray(ticket.selections) ? ticket.selections : []).filter((selection) => {
+        const fixtureId = Number(selection.fixtureId || selection.fixture_id || 0);
+        return fixtureId > 0 && selectionSportMeta(selection).className === "football";
+      });
+    }
+
     function renderTicketActions(title, selections, totalOdd, possibleReturn) {
       if (!selections.length) return "";
       const text = ticketCopyText(title, selections, totalOdd, possibleReturn);
@@ -3189,10 +3381,13 @@
         stake: Number(stakeInput.value || 5)
       });
       const copyId = registerTicketAction({ text, ticket: historyTicket });
+      const watchRecord = historyTicket && activeTicketWatch(historyTicket.signature);
+      const canWatch = historyTicket && monitorableFootballSelections(historyTicket).length > 0;
       return [
         "<div class=\"ticket-actions\">",
         "<button class=\"btn btn-copy\" type=\"button\" data-copy-ticket-id=\"" + escapeHtml(copyId) + "\">Copiar bilhete</button>",
         "<button class=\"btn btn-share\" type=\"button\" data-share-ticket-id=\"" + escapeHtml(copyId) + "\">Compartilhar</button>",
+        "<button class=\"btn btn-watch\" type=\"button\" data-watch-ticket-id=\"" + escapeHtml(copyId) + "\" data-active=\"" + (watchRecord ? "true" : "false") + "\"" + (canWatch ? "" : " disabled title=\"Sem jogo de futebol identificado\"") + ">" + (watchRecord ? "Sino ativo" : "Acompanhar") + "</button>",
         "<a class=\"btn btn-book\" href=\"" + BETANO_URL + "\" target=\"_blank\" rel=\"noopener noreferrer\">Abrir Betano</a>",
         "</div>"
       ].join("");
@@ -4564,6 +4759,41 @@
       }
     }
 
+    async function ensurePushSubscription() {
+      if (!("serviceWorker" in navigator) || !("PushManager" in window) || !("Notification" in window)) {
+        throw new Error("Este navegador nao suporta Web Push.");
+      }
+      if (isIosDevice() && !isStandalonePwa()) {
+        throw new Error("No iPhone, abra pelo icone instalado na Tela de Inicio antes de ativar.");
+      }
+
+      const keyResponse = await fetch("/api/push-public-key");
+      const keyData = await keyResponse.json();
+      if (!keyResponse.ok || !keyData.configured || !keyData.publicKey) {
+        throw new Error("Alertas ainda nao estao configurados no Netlify.");
+      }
+
+      const permission = await Notification.requestPermission();
+      if (permission !== "granted") throw new Error("Permissao de notificacao nao liberada.");
+      const registration = await registerServiceWorker();
+      if (!registration) throw new Error("Service worker indisponivel.");
+      const existing = await registration.pushManager.getSubscription();
+      const subscription = existing || await registration.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(keyData.publicKey),
+      });
+      const saveResponse = await fetch("/api/push-subscribe", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ subscription }),
+      });
+      if (!saveResponse.ok) {
+        const errorData = await saveResponse.json().catch(() => ({}));
+        throw new Error(errorData.detail || "Nao consegui salvar este aparelho.");
+      }
+      return subscription;
+    }
+
     async function enablePushAlerts(triggerButton = pushAlertsBtn) {
       if (!triggerButton) return;
       const originalHtml = triggerButton.innerHTML;
@@ -4571,43 +4801,7 @@
       triggerButton.textContent = "Ativando...";
 
       try {
-        if (!("serviceWorker" in navigator) || !("PushManager" in window) || !("Notification" in window)) {
-          throw new Error("Este navegador nao suporta Web Push.");
-        }
-
-        if (isIosDevice() && !isStandalonePwa()) {
-          throw new Error("No iPhone, abra pelo icone instalado na Tela de Inicio antes de ativar.");
-        }
-
-        const keyResponse = await fetch("/api/push-public-key");
-        const keyData = await keyResponse.json();
-        if (!keyResponse.ok || !keyData.configured || !keyData.publicKey) {
-          throw new Error("Alertas ainda nao estao configurados no Netlify.");
-        }
-
-        const permission = await Notification.requestPermission();
-        if (permission !== "granted") {
-          throw new Error("Permissao de notificacao nao liberada.");
-        }
-
-        const registration = await registerServiceWorker();
-        if (!registration) throw new Error("Service worker indisponivel.");
-
-        const existing = await registration.pushManager.getSubscription();
-        const subscription = existing || await registration.pushManager.subscribe({
-          userVisibleOnly: true,
-          applicationServerKey: urlBase64ToUint8Array(keyData.publicKey),
-        });
-
-        const saveResponse = await fetch("/api/push-subscribe", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ subscription }),
-        });
-        if (!saveResponse.ok) {
-          const errorData = await saveResponse.json().catch(() => ({}));
-          throw new Error(errorData.detail || "Nao consegui salvar este aparelho.");
-        }
+        const subscription = await ensurePushSubscription();
 
         await fetch("/api/push-test", {
           method: "POST",
@@ -4622,6 +4816,93 @@
         setPushStatus(error && error.message ? error.message : "Nao consegui ativar alertas.");
       } finally {
         triggerButton.disabled = false;
+      }
+    }
+
+    function closeTicketWatchDialog() {
+      pendingTicketWatchAction = null;
+      if (ticketWatchDialog.open) ticketWatchDialog.close();
+    }
+
+    function openTicketWatchDialog(action, button) {
+      const ticket = action && action.ticket;
+      const selections = monitorableFootballSelections(ticket);
+      if (!ticket || !selections.length) return;
+      const record = activeTicketWatch(ticket.signature);
+      pendingTicketWatchAction = { action, button, record };
+      ticketWatchSelections.innerHTML = selections.map((selection) => [
+        "<div class=\"watch-selection\">",
+        "<strong>" + escapeHtml(selection.game || "Jogo") + "</strong><br>",
+        "<span class=\"muted\">" + escapeHtml(formatMarketName(selection.market || selection.category || "Mercado") + " - " + formatSelectionName(selection.selection || "--", selection.market || selection.category || "")) + "</span>",
+        "</div>"
+      ].join("")).join("");
+      ticketWatchForm.elements.watchKickoff.checked = record ? record.preferences.kickoff !== false : true;
+      ticketWatchForm.elements.watchGoals.checked = record ? record.preferences.goals !== false : true;
+      ticketWatchForm.elements.watchFinal.checked = record ? record.preferences.finalResult !== false : true;
+      ticketWatchConfirm.textContent = record ? "Desativar sino" : "Ativar sino";
+      ticketWatchStatus.textContent = record
+        ? "Este bilhete ja esta sendo acompanhado neste aparelho."
+        : selections.length + " selecao(oes) de futebol serao acompanhadas.";
+      ticketWatchDialog.showModal();
+    }
+
+    async function submitTicketWatch(event) {
+      event.preventDefault();
+      if (!pendingTicketWatchAction) return;
+      const { action, button, record } = pendingTicketWatchAction;
+      const ticket = action.ticket;
+      ticketWatchConfirm.disabled = true;
+      ticketWatchCancel.disabled = true;
+
+      try {
+        if (record) {
+          const response = await fetch("/api/ticket-watch", {
+            method: "DELETE",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ watchId: record.watchId }),
+          });
+          if (!response.ok) throw new Error("Nao consegui desativar este sino.");
+          const watches = readTicketWatches();
+          delete watches[ticket.signature];
+          writeTicketWatches(watches);
+          button.dataset.active = "false";
+          button.textContent = "Acompanhar";
+          closeTicketWatchDialog();
+          return;
+        }
+
+        ticketWatchStatus.textContent = "Ativando notificacoes e salvando o bilhete...";
+        const subscription = await ensurePushSubscription();
+        const preferences = {
+          kickoff: ticketWatchForm.elements.watchKickoff.checked,
+          goals: ticketWatchForm.elements.watchGoals.checked,
+          finalResult: ticketWatchForm.elements.watchFinal.checked,
+          selections: true,
+        };
+        const response = await fetch("/api/ticket-watch", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ subscription, ticket, preferences }),
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.detail || data.error || "Nao consegui ativar o sino.");
+        const watches = readTicketWatches();
+        watches[ticket.signature] = {
+          active: true,
+          watchId: data.watchId,
+          preferences,
+          expiresAt: data.expiresAt,
+        };
+        writeTicketWatches(watches);
+        button.dataset.active = "true";
+        button.textContent = "Sino ativo";
+        setPushStatus("Sino ativo para " + data.monitoredFixtures + " jogo(s) deste bilhete.");
+        closeTicketWatchDialog();
+      } catch (error) {
+        ticketWatchStatus.textContent = error && error.message ? error.message : "Nao consegui configurar este sino.";
+      } finally {
+        ticketWatchConfirm.disabled = false;
+        ticketWatchCancel.disabled = false;
       }
     }
 
@@ -4717,6 +4998,10 @@
       enablePushAlerts(pushAlertsBtn);
     });
 
+    ticketWatchForm.addEventListener("submit", submitTicketWatch);
+    ticketWatchClose.addEventListener("click", closeTicketWatchDialog);
+    ticketWatchCancel.addEventListener("click", closeTicketWatchDialog);
+
     combatCourtBtn.addEventListener("click", () => {
       runCombatCourtPicks();
       saveState();
@@ -4734,6 +5019,12 @@
 
     document.addEventListener("click", async (event) => {
       const target = event.target;
+      const watchButton = target && target.closest ? target.closest("[data-watch-ticket-id]") : null;
+      if (watchButton) {
+        const action = ticketActionStore.get(watchButton.getAttribute("data-watch-ticket-id"));
+        if (action) openTicketWatchDialog(action, watchButton);
+        return;
+      }
       const shareButton = target && target.closest ? target.closest("[data-share-ticket-id]") : null;
       if (shareButton) {
         const action = ticketActionStore.get(shareButton.getAttribute("data-share-ticket-id"));
